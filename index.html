@@ -1,338 +1,256 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎓 GTK LO Connect with Texts</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.432/pdf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            max-width: 950px; margin: 0 auto; padding: 15px; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            min-height: 100vh; 
-        }
-        .container { 
-            background: white; border-radius: 20px; padding: 25px; 
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
-        }
-        h1 { 
-            text-align: center; color: #333; margin-bottom: 30px; 
-            background: linear-gradient(45deg, #667eea, #764ba2); 
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-        }
-        .input-group { margin: 25px 0; padding: 20px; border: 2px dashed #667eea; border-radius: 15px; }
-        .input-group h3 { margin-top: 0; color: #667eea; }
-        label { display: block; font-weight: bold; color: #555; margin-bottom: 8px; }
-        input[type="file"], input[type="password"], input[type="number"] { 
-            width: 100%; padding: 12px; border: 2px solid #e1e5e9; 
-            border-radius: 10px; font-size: 16px; margin: 5px 0; 
-        }
-        .page-inputs { display: flex; gap: 15px; flex-wrap: wrap; }
-        input[type="number"] { width: 120px; flex: 1; min-width: 100px; }
-        button { 
-            background: linear-gradient(45deg, #667eea, #764ba2); color: white; 
-            border: none; font-weight: bold; cursor: pointer; padding: 15px 25px; 
-            border-radius: 12px; margin: 10px 5px; transition: all 0.3s; 
-        }
-        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
-        #output { margin-top: 25px; min-height: 200px; }
-        .loading { text-align: center; padding: 40px; font-size: 18px; color: #667eea; }
-        .result-card { 
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
-            color: white; padding: 20px; border-radius: 15px; margin: 15px 0; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
-        }
-        .match { 
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
-            padding: 15px; margin: 10px 0; border-radius: 10px; 
-        }
-        .objective { 
-            background: #a8edea; padding: 10px; margin: 8px 0; border-radius: 8px; 
-            border-left: 5px solid #667eea; color: #333; 
-        }
-        .status { 
-            padding: 15px; border-radius: 10px; margin: 15px 0; font-weight: bold; 
-            text-align: center; font-size: 16px;
-        }
-        .success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
-        .error { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
-        .api-key-section {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-            padding: 20px; border-radius: 15px; margin: 20px 0;
-            border: 3px solid #ff8c42;
-        }
-        .pdf-status { 
-            padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; 
-            background: #e8f5e8; border-left: 4px solid #28a745; 
-        }
-        @media (max-width: 768px) { 
-            .page-inputs { flex-direction: column; }
-            input[type="number"] { width: 100%; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Learning Outcomes ↔ Textbook Connector</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0; padding: 16px;
+      background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+    }
+    .wrap {
+      max-width: 900px; margin: 0 auto;
+      background: #fff; border-radius: 16px;
+      padding: 16px; box-shadow: 0 12px 30px rgba(0,0,0,.15);
+    }
+    h1 { text-align:center; margin-top: 4px; font-size: 1.4rem; }
+    .block { border:1px dashed #ccd; border-radius:12px; padding:12px; margin-top:12px; }
+    label { font-weight:600; font-size:.9rem; }
+    input[type="file"],input[type="password"],input[type="number"]{
+      width:100%; padding:8px 10px; margin-top:6px;
+      border-radius:10px; border:1px solid #ccd; font-size:.9rem;
+    }
+    .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+    .row input[type="number"]{flex:1;min-width:90px;}
+    button{
+      width:100%; margin-top:10px;
+      padding:10px 14px; border-radius:12px;
+      border:none; font-weight:600; font-size:.95rem;
+      color:#fff; background:linear-gradient(45deg,#667eea,#764ba2);
+    }
+    button:disabled{opacity:.5;}
+    .status{margin-top:8px;padding:8px;border-radius:8px;font-size:.85rem;}
+    .ok{background:#e6ffed;color:#03543f;border:1px solid #a7f3d0;}
+    .err{background:#fde8e8;color:#9b1c1c;border:1px solid #fecaca;}
+    #output{margin-top:16px;}
+    .card{
+      background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);
+      color:#fff;padding:12px;border-radius:12px;margin-bottom:10px;
+    }
+    .match{background:#fff;color:#123;padding:10px;border-radius:10px;margin-top:8px;}
+    .match h4{margin:0 0 4px 0;font-size:.95rem;}
+    .obj{background:#eef6ff;border-left:4px solid #667eea;border-radius:8px;padding:6px 8px;margin-top:4px;}
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎓 GTK Connect Texts with LO</h1>
-        
-        <!-- 🔐 SECURE API KEY -->
-        <div class="input-group api-key-section">
-            <label>🔑 Groq AI API Key <span style="color:#666; font-size:14px;">(Free from groq.com)</span></label>
-            <input type="password" id="groqApiKey" placeholder="sk-groq-..." />
-        </div>
+<div class="wrap">
+  <h1>Learning Outcomes ↔ Textbook Connector</h1>
 
-        <!-- 📚 LEARNING OUTCOMES PDF -->
-        <div class="input-group">
-            <h3>📚 Learning Outcomes PDF</h3>
-            <input type="file" id="outcomesPdf" accept=".pdf" />
-            <div class="page-inputs">
-                <input type="number" id="outcomesStartPage" placeholder="Start Page" min="1" />
-                <input type="number" id="outcomesEndPage" placeholder="End Page" min="1" />
-            </div>
-            <button onclick="extractOutcomes()">📖 Extract Outcomes</button>
-            <div id="outcomesStatus"></div>
-        </div>
+  <!-- API key -->
+  <div class="block">
+    <label>Groq API key (gsk‑…)</label>
+    <input type="password" id="apiKey" placeholder="gsk_xxxx" />
+  </div>
 
-        <!-- 📖 TEXTBOOK PDF -->
-        <div class="input-group">
-            <h3>📖 Textbook PDF</h3>
-            <input type="file" id="textbookPdf" accept=".pdf" />
-            <div class="page-inputs">
-                <input type="number" id="textbookStartPage" placeholder="Start Page" min="1" />
-                <input type="number" id="textbookEndPage" placeholder="End Page" min="1" />
-            </div>
-            <button onclick="extractTextbook()">📖 Extract Lesson</button>
-            <div id="textbookStatus"></div>
-        </div>
-
-        <button onclick="analyzeContent()" id="analyzeBtn" disabled style="width: 100%; font-size: 18px; padding: 20px;">
-            🚀 Analyze & Generate Lesson Plan
-        </button>
-        
-        <div id="output"></div>
+  <!-- Outcomes PDF -->
+  <div class="block">
+    <label>Learning outcomes PDF</label>
+    <input type="file" id="outPdf" accept="application/pdf" />
+    <div class="row">
+      <input type="number" id="outStart" placeholder="Start page" min="1" />
+      <input type="number" id="outEnd" placeholder="End page" min="1" />
     </div>
+    <button type="button" onclick="extractOutcomes()">Extract outcomes text</button>
+    <div id="outStatus"></div>
+  </div>
 
-    <script>
-        let outcomesText = '';
-        let textbookText = '';
+  <!-- Textbook PDF -->
+  <div class="block">
+    <label>Textbook PDF</label>
+    <input type="file" id="tbPdf" accept="application/pdf" />
+    <div class="row">
+      <input type="number" id="tbStart" placeholder="Start page" min="1" />
+      <input type="number" id="tbEnd" placeholder="End page" min="1" />
+    </div>
+    <button type="button" onclick="extractTextbook()">Extract textbook text</button>
+    <div id="tbStatus"></div>
+  </div>
 
-        // Ready state checker
-        function checkReadyState() {
-            const apiKey = document.getElementById('groqApiKey').value.trim();
-            const hasOutcomes = outcomesText.length > 0;
-            const hasTextbook = textbookText.length > 0;
-            
-            document.getElementById('analyzeBtn').disabled = !(apiKey && hasOutcomes && hasTextbook);
-        }
+  <button id="analyzeBtn" type="button" onclick="analyze()" disabled>
+    Analyze and build lesson plan
+  </button>
 
-        // Listen for API key changes
-        document.getElementById('groqApiKey').addEventListener('input', checkReadyState);
+  <div id="output"></div>
+</div>
 
-        // Extract Learning Outcomes PDF
-        async function extractOutcomes() {
-            const file = document.getElementById('outcomesPdf').files[0];
-            const startPage = parseInt(document.getElementById('outcomesStartPage').value) || 1;
-            const endPage = parseInt(document.getElementById('outcomesEndPage').value) || startPage;
-            
-            if (!file) return showStatus('outcomesStatus', 'Please select Learning Outcomes PDF', 'error');
-            
-            document.getElementById('outcomesStatus').innerHTML = '<div class="status success">🔄 Extracting pages ' + startPage + '-' + endPage + '...</div>';
-            
-            try {
-                outcomesText = await extractPDFRange(file, startPage, endPage);
-                document.getElementById('outcomesStatus').innerHTML = 
-                    '<div class="pdf-status">✅ Extracted ' + outcomesText.length + ' chars from pages ' + startPage + '-' + endPage + '</div>';
-                checkReadyState();
-            } catch (error) {
-                document.getElementById('outcomesStatus').innerHTML = 
-                    '<div class="status error">❌ Extraction failed. Trying OCR...</div>';
-                outcomesText = await ocrPDFRange(file, startPage, endPage);
-                document.getElementById('outcomesStatus').innerHTML = 
-                    '<div class="pdf-status">✅ OCR complete! Ready for analysis.</div>';
-                checkReadyState();
-            }
-        }
+<script>
+let outcomesText = "";
+let textbookText = "";
 
-        // Extract Textbook PDF
-        async function extractTextbook() {
-            const file = document.getElementById('textbookPdf').files[0];
-            const startPage = parseInt(document.getElementById('textbookStartPage').value) || 1;
-            const endPage = parseInt(document.getElementById('textbookEndPage').value) || startPage;
-            
-            if (!file) return showStatus('textbookStatus', 'Please select Textbook PDF', 'error');
-            
-            document.getElementById('textbookStatus').innerHTML = '<div class="status success">🔄 Extracting pages ' + startPage + '-' + endPage + '...</div>';
-            
-            try {
-                textbookText = await extractPDFRange(file, startPage, endPage);
-                document.getElementById('textbookStatus').innerHTML = 
-                    '<div class="pdf-status">✅ Extracted ' + textbookText.length + ' chars from pages ' + startPage + '-' + endPage + '</div>';
-                checkReadyState();
-            } catch (error) {
-                document.getElementById('textbookStatus').innerHTML = 
-                    '<div class="status error">❌ Extraction failed. Trying OCR...</div>';
-                textbookText = await ocrPDFRange(file, startPage, endPage);
-                document.getElementById('textbookStatus').innerHTML = 
-                    '<div class="pdf-status">✅ OCR complete! Ready for analysis.</div>';
-                checkReadyState();
-            }
-        }
+function setStatus(elId, msg, ok=true){
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="status ${ok?'ok':'err'}">${msg}</div>`;
+}
 
-        // Extract specific page range from PDF
-        async function extractPDFRange(file, startPage, endPage) {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let fullText = '';
-            
-            for (let i = startPage; i <= Math.min(endPage, pdf.numPages); i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                fullText += `--- PAGE ${i} ---
-${pageText}
+async function extractRangeFromPdf(file, start, end){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const last = pdf.numPages;
+  const from = Math.max(1, start||1);
+  const to = Math.min(end||from, last);
+  let all = "";
+  for(let p=from;p<=to;p++){
+    const page = await pdf.getPage(p);
+    const txt = await page.getTextContent();
+    const line = txt.items.map(i=>i.str).join(" ");
+    all += `
 
-`;
-            }
-            return fullText.trim();
-        }
+[Page ${p}]
+` + line;
+  }
+  return all.trim();
+}
 
-        // OCR specific page range
-        async function ocrPDFRange(file, startPage, endPage) {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let fullText = '';
-            
-            for (let i = startPage; i <= Math.min(endPage, pdf.numPages); i++) {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: 2.0 });
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                await page.render({ canvasContext: ctx, viewport }).promise;
-                
-                const result = await Tesseract.recognize(canvas.toDataURL(), 'eng');
-                fullText += `--- PAGE ${i} (OCR) ---
-${result.data.text}
+async function extractOutcomes(){
+  const f = document.getElementById("outPdf").files[0];
+  if(!f){ setStatus("outStatus","Please choose a PDF.",false); return; }
+  const s = Number(document.getElementById("outStart").value||1);
+  const e = Number(document.getElementById("outEnd").value||s);
+  try{
+    setStatus("outStatus",`Reading pages ${s}–${e} …`);
+    outcomesText = await extractRangeFromPdf(f,s,e);
+    setStatus("outStatus",`OK – extracted ${outcomesText.length} characters from outcomes.`);
+    enableAnalyze();
+  }catch(err){
+    setStatus("outStatus","This PDF seems to be image‑only. Please OCR it once in a desktop tool and upload the searchable version.",false);
+  }
+}
 
-`;
-            }
-            return fullText.trim();
-        }
+async function extractTextbook(){
+  const f = document.getElementById("tbPdf").files[0];
+  if(!f){ setStatus("tbStatus","Please choose a PDF.",false); return; }
+  const s = Number(document.getElementById("tbStart").value||1);
+  const e = Number(document.getElementById("tbEnd").value||s);
+  try{
+    setStatus("tbStatus",`Reading pages ${s}–${e} …`);
+    textbookText = await extractRangeFromPdf(f,s,e);
+    setStatus("tbStatus",`OK – extracted ${textbookText.length} characters from textbook.`);
+    enableAnalyze();
+  }catch(err){
+    setStatus("tbStatus","This PDF seems to be image‑only. Please OCR it once in a desktop tool and upload the searchable version.",false);
+  }
+}
 
-        // Main analysis
-        async function analyzeContent() {
-            const apiKey = document.getElementById('groqApiKey').value.trim();
-            
-            if (!apiKey) return showStatus('output', '🔑 Enter Groq API key first', 'error');
-            if (!outcomesText) return showStatus('output', '📚 Extract Learning Outcomes first', 'error');
-            if (!textbookText) return showStatus('output', '📖 Extract Textbook first', 'error');
+function enableAnalyze(){
+  const key = document.getElementById("apiKey").value.trim();
+  document.getElementById("analyzeBtn").disabled = !(key && outcomesText && textbookText);
+}
 
-            document.getElementById('analyzeBtn').disabled = true;
-            document.getElementById('output').innerHTML = '<div class="loading">🧠 Generating lesson plan with Groq AI... (15-25 seconds)</div>';
+document.getElementById("apiKey").addEventListener("input", enableAnalyze);
 
-            const prompt = `Universal Learning Outcomes → Textbook Connector
+async function analyze(){
+  const key = document.getElementById("apiKey").value.trim();
+  if(!key){ setStatus("output","Enter Groq key first.",false); return; }
 
-LEARNING OUTCOMES (pages ${document.getElementById('outcomesStartPage').value || 1}-${document.getElementById('outcomesEndPage').value || ''}):
-${outcomesText.substring(0, 4000)}...
+  document.getElementById("output").innerHTML =
+    '<div class="status ok">Talking to Groq… this can take 10–20 seconds.</div>';
 
-TEXTBOOK LESSON (pages ${document.getElementById('textbookStartPage').value || 1}-${document.getElementById('textbookEndPage').value || ''}):
-${textbookText.substring(0, 6000)}...
+  const prompt = `
+You are a curriculum planner.
 
-TASK: Auto-detect subject/class, match outcomes to textbook, create lesson plan.
+LEARNING OUTCOMES TEXT:
+${outcomesText.slice(0,3500)}
 
-OUTPUT EXACT JSON:
+TEXTBOOK LESSON TEXT:
+${textbookText.slice(0,6000)}
+
+1. Detect subject and approximate class.
+2. Pick 5–8 key learning outcomes.
+3. For each, say whether it is covered by the lesson and explain briefly.
+4. For each matched outcome, give 3 SMART objectives, 3 activities, 2 assessments.
+5. Build a concise lesson plan (duration, materials, step‑by‑step procedure).
+
+Return ONLY valid JSON:
+
 {
-  "subject": "Detected Subject",
-  "class": "Detected Class", 
-  "lessonTopic": "Lesson Title",
+  "subject": "string",
+  "class": "string",
+  "lessonTopic": "string",
   "learningOutcomes": [
     {
-      "outcome": "Full outcome text",
-      "matched": true/false,
-      "matchExplanation": "Why it matches textbook",
-      "smartObjectives": ["Objective 1", "Objective 2", "Objective 3"],
-      "activities": ["Activity 1", "Activity 2", "Activity 3"],
-      "assessments": ["Assessment 1", "Assessment 2"]
+      "outcome": "string",
+      "matched": true,
+      "matchExplanation": "string",
+      "smartObjectives": ["string"],
+      "activities": ["string"],
+      "assessments": ["string"]
     }
   ],
   "lessonPlan": {
-    "duration": "45-60 minutes",
-    "materials": ["List"],
-    "procedure": ["Step 1", "Step 2", "Step 3"]
+    "duration": "string",
+    "materials": ["string"],
+    "procedure": ["string"]
   }
-}`;
+}
+`;
 
-            try {
-                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: 'llama3-70b-8192',
-                        messages: [{ role: 'user', content: prompt }],
-                        temperature: 0.2,
-                        max_tokens: 4000
-                    })
-                });
+  try{
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions",{
+      method:"POST",
+      headers:{
+        "Authorization":"Bearer "+key,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        model:"llama3-70b-8192",
+        messages:[{role:"user",content:prompt}],
+        temperature:0.2,
+        max_tokens:3500
+      })
+    });
+    if(!res.ok) throw new Error("Groq API error: "+res.status);
+    const data = await res.json();
+    const obj = JSON.parse(data.choices[0].message.content);
+    renderResult(obj);
+  }catch(err){
+    document.getElementById("output").innerHTML =
+      `<div class="status err">${err.message}</div>`;
+  }
+}
 
-                if (!response.ok) throw new Error(`API Error ${response.status}`);
-
-                const data = await response.json();
-                const result = JSON.parse(data.choices[0].message.content);
-                displayResults(result);
-            } catch (error) {
-                showStatus('output', `❌ ${error.message}<br><a href="https://console.groq.com/keys" target="_blank">Get free key →</a>`, 'error');
-            } finally {
-                document.getElementById('analyzeBtn').disabled = false;
-            }
-        }
-
-        function displayResults(data) {
-            let html = `
-                <div class="result-card">
-                    <h3>📚 ${data.subject} - Class ${data.class}</h3>
-                    <h4>🎯 ${data.lessonTopic}</h4>
-                </div>
-            `;
-            
-            html += '<div class="result-card"><h4>✅ Matched Learning Outcomes</h4>';
-            data.learningOutcomes.forEach((outcome, i) => {
-                if (outcome.matched) {
-                    html += `
-                        <div class="match">
-                            <h5>${i+1}. ${outcome.outcome}</h5>
-                            <p><strong>💡 Match:</strong> ${outcome.matchExplanation}</p>
-                            <div class="objective">
-                                <strong>🎯 Objectives:</strong><br>${outcome.smartObjectives.map(o => `• ${o}`).join('<br>')}
-                            </div>
-                            <strong>🏃 Activities:</strong> ${outcome.activities.join(' • ')}<br>
-                            <strong>📝 Assessments:</strong> ${outcome.assessments.join(' • ')}
-                        </div>`;
-                }
-            });
-            html += '</div>';
-
-            html += `
-                <div class="result-card">
-                    <h4>📋 Lesson Plan</h4>
-                    <p><strong>⏱️ ${data.lessonPlan.duration}</strong></p>
-                    <p><strong>📦 Materials:</strong> ${data.lessonPlan.materials.join(', ')}</p>
-                    <strong>📜 Steps:</strong><br>${data.lessonPlan.procedure.map((s,i) => `${i+1}. ${s}`).join('<br>')}
-                </div>`;
-
-            document.getElementById('output').innerHTML = html;
-        }
-
-        function showStatus(elementId, message, type) {
-            document.getElementById(elementId).innerHTML = `<div class="status ${type}">${message}</div>`;
-        }
-    </script>
+function renderResult(d){
+  let html = `
+  <div class="card">
+    <strong>${d.subject}</strong> – Class ${d.class}<br/>
+    Topic: ${d.lessonTopic}
+  </div>
+  <div class="card">
+    <strong>Matched learning outcomes</strong>`;
+  (d.learningOutcomes||[]).forEach((o,i)=>{
+    if(o.matched){
+      html += `
+      <div class="match">
+        <h4>${i+1}. ${o.outcome}</h4>
+        <div><strong>Why it matches:</strong> ${o.matchExplanation}</div>
+        <div class="obj"><strong>Objectives</strong><br>${(o.smartObjectives||[]).map(x=>"• "+x).join("<br>")}</div>
+        <div><strong>Activities:</strong> ${(o.activities||[]).join(" • ")}</div>
+        <div><strong>Assessments:</strong> ${(o.assessments||[]).join(" • ")}</div>
+      </div>`;
+    }
+  });
+  html += `</div>
+  <div class="card">
+    <strong>Lesson plan</strong><br/>
+    Duration: ${d.lessonPlan.duration}<br/>
+    Materials: ${(d.lessonPlan.materials||[]).join(", ")}<br/><br/>
+    ${ (d.lessonPlan.procedure||[]).map((s,i)=>`${i+1}. ${s}`).join("<br>") }
+  </div>`;
+  document.getElementById("output").innerHTML = html;
+}
+</script>
 </body>
-    </html>
+</html>
