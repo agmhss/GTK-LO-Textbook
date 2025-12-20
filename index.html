@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔒 Secure Learning Outcomes Connector</title>
+    <title>🎓 Dual PDF Learning Outcomes Connector</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.432/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            max-width: 900px; margin: 0 auto; padding: 15px; 
+            max-width: 950px; margin: 0 auto; padding: 15px; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
             min-height: 100vh; 
         }
@@ -23,33 +23,22 @@
             background: linear-gradient(45deg, #667eea, #764ba2); 
             -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
         }
-        .input-group { margin: 20px 0; }
-        label { 
-            display: block; font-weight: bold; color: #555; margin-bottom: 8px; 
+        .input-group { margin: 25px 0; padding: 20px; border: 2px dashed #667eea; border-radius: 15px; }
+        .input-group h3 { margin-top: 0; color: #667eea; }
+        label { display: block; font-weight: bold; color: #555; margin-bottom: 8px; }
+        input[type="file"], input[type="password"], input[type="number"] { 
+            width: 100%; padding: 12px; border: 2px solid #e1e5e9; 
+            border-radius: 10px; font-size: 16px; margin: 5px 0; 
         }
-        input[type="number"], input[type="file"], input[type="password"], textarea, button { 
-            width: 100%; padding: 15px; border: 2px solid #e1e5e9; 
-            border-radius: 12px; font-size: 16px; transition: all 0.3s ease; 
-        }
-        input[type="number"] { width: 48%; display: inline-block; margin-right: 4%; }
-        input[type="number"]:last-child { margin-right: 0; }
-        textarea { resize: vertical; min-height: 120px; }
+        .page-inputs { display: flex; gap: 15px; flex-wrap: wrap; }
+        input[type="number"] { width: 120px; flex: 1; min-width: 100px; }
         button { 
             background: linear-gradient(45deg, #667eea, #764ba2); color: white; 
-            border: none; font-weight: bold; cursor: pointer; margin: 10px 0; 
+            border: none; font-weight: bold; cursor: pointer; padding: 15px 25px; 
+            border-radius: 12px; margin: 10px 5px; transition: all 0.3s; 
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
-        button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        #cameraContainer { position: relative; display: none; }
-        #video { 
-            width: 100%; max-width: 400px; height: 300px; border-radius: 12px; 
-            border: 3px solid #667eea; 
-        }
-        #captureBtn { 
-            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); 
-            background: #ff4757; color: white; border: none; width: 60px; height: 60px; 
-            border-radius: 50%; font-size: 24px; cursor: pointer; 
-        }
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
         #output { margin-top: 25px; min-height: 200px; }
         .loading { text-align: center; padding: 40px; font-size: 18px; color: #667eea; }
         .result-card { 
@@ -63,211 +52,163 @@
         }
         .objective { 
             background: #a8edea; padding: 10px; margin: 8px 0; border-radius: 8px; 
-            border-left: 5px solid #667eea; 
+            border-left: 5px solid #667eea; color: #333; 
         }
-        ul { padding-left: 20px; }
         .status { 
-            padding: 12px; border-radius: 8px; margin: 10px 0; font-weight: bold; 
+            padding: 15px; border-radius: 10px; margin: 15px 0; font-weight: bold; 
+            text-align: center; font-size: 16px;
         }
-        .success { 
-            background: #d4edda; color: #155724; border: 1px solid #c3e6cb; 
-        }
-        .error { 
-            background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; 
-        }
+        .success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
         .api-key-section {
             background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-            padding: 20px;
-            border-radius: 15px;
-            margin: 20px 0;
+            padding: 20px; border-radius: 15px; margin: 20px 0;
             border: 3px solid #ff8c42;
         }
+        .pdf-status { 
+            padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; 
+            background: #e8f5e8; border-left: 4px solid #28a745; 
+        }
         @media (max-width: 768px) { 
-            input[type="number"] { width: 100%; margin-right: 0; margin-bottom: 10px; } 
+            .page-inputs { flex-direction: column; }
+            input[type="number"] { width: 100%; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎓 Universal Learning Outcomes Connector</h1>
+        <h1>🎓 Dual PDF Learning Outcomes Connector</h1>
         
-        <!-- 🔐 SECURE API KEY INPUT - USER NEVER SEES CODE -->
+        <!-- 🔐 SECURE API KEY -->
         <div class="input-group api-key-section">
-            <label>🔑 Groq AI API Key <span style="color:#666; font-size:14px;">(Get free key from groq.com)</span></label>
+            <label>🔑 Groq AI API Key <span style="color:#666; font-size:14px;">(Free from groq.com)</span></label>
             <input type="password" id="groqApiKey" placeholder="sk-groq-..." />
-            <small style="color:#666;">Your key is encrypted and never stored. Enter once per session.</small>
         </div>
-        
+
+        <!-- 📚 LEARNING OUTCOMES PDF -->
         <div class="input-group">
-            <label>📚 Upload Learning Outcomes PDF</label>
-            <input type="file" id="pdfFile" accept=".pdf" />
-        </div>
-        
-        <div class="input-group">
-            <label>📖 Textbook Input Method</label>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button onclick="toggleCamera()" id="cameraBtn">📷 Camera Capture</button>
-                <button onclick="toggleTextInput()">⌨️ Type/Paste Text</button>
+            <h3>📚 Learning Outcomes PDF</h3>
+            <input type="file" id="outcomesPdf" accept=".pdf" />
+            <div class="page-inputs">
+                <input type="number" id="outcomesStartPage" placeholder="Start Page" min="1" />
+                <input type="number" id="outcomesEndPage" placeholder="End Page" min="1" />
             </div>
+            <button onclick="extractOutcomes()">📖 Extract Outcomes</button>
+            <div id="outcomesStatus"></div>
         </div>
-        
-        <div id="cameraContainer">
-            <video id="video" autoplay playsinline></video>
-            <button id="captureBtn" onclick="captureImage()">📸 Capture & Extract</button>
-            <canvas id="canvas" style="display: none;"></canvas>
+
+        <!-- 📖 TEXTBOOK PDF -->
+        <div class="input-group">
+            <h3>📖 Textbook PDF</h3>
+            <input type="file" id="textbookPdf" accept=".pdf" />
+            <div class="page-inputs">
+                <input type="number" id="textbookStartPage" placeholder="Start Page" min="1" />
+                <input type="number" id="textbookEndPage" placeholder="End Page" min="1" />
+            </div>
+            <button onclick="extractTextbook()">📖 Extract Lesson</button>
+            <div id="textbookStatus"></div>
         </div>
-        
-        <div id="textInputContainer" style="display: none;">
-            <label>📄 Textbook Content 
-                <span style="display:inline-block;">
-                    (Pages 
-                    <input type="number" id="startPage" placeholder="Start" min="1" style="width: 80px;"> 
-                    to 
-                    <input type="number" id="endPage" placeholder="End" min="1" style="width: 80px;">
-                    )
-                </span>
-            </label>
-            <textarea id="textbookText" placeholder="Paste textbook content here or use camera above to capture pages..."></textarea>
-        </div>
-        
-        <button onclick="analyzeContent()" id="analyzeBtn" disabled>🚀 Analyze with Groq AI</button>
+
+        <button onclick="analyzeContent()" id="analyzeBtn" disabled style="width: 100%; font-size: 18px; padding: 20px;">
+            🚀 Analyze & Generate Lesson Plan
+        </button>
         
         <div id="output"></div>
     </div>
 
     <script>
-        let pdfText = '';
-        let cameraStream = null;
-        let capturedImage = null;
+        let outcomesText = '';
+        let textbookText = '';
 
-        // Check if API key is entered
-        document.getElementById('groqApiKey').addEventListener('input', function() {
-            checkReadyState();
-        });
-
-        // Check PDF upload
-        document.getElementById('pdfFile').addEventListener('change', function() {
-            checkReadyState();
-        });
-
-        // Check textbook text input
-        document.getElementById('textbookText').addEventListener('input', function() {
-            checkReadyState();
-        });
-
+        // Ready state checker
         function checkReadyState() {
             const apiKey = document.getElementById('groqApiKey').value.trim();
-            const hasPdf = pdfText.length > 0;
-            const hasText = document.getElementById('textbookText').value.trim().length > 0;
+            const hasOutcomes = outcomesText.length > 0;
+            const hasTextbook = textbookText.length > 0;
             
-            document.getElementById('analyzeBtn').disabled = !(apiKey && hasPdf && hasText);
+            document.getElementById('analyzeBtn').disabled = !(apiKey && hasOutcomes && hasTextbook);
         }
 
-        // Initialize camera
-        async function initCamera() {
-            try {
-                cameraStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
-                });
-                const video = document.getElementById('video');
-                video.srcObject = cameraStream;
-            } catch (err) {
-                showStatus('Camera access denied. Use text input instead.', 'error');
-            }
-        }
+        // Listen for API key changes
+        document.getElementById('groqApiKey').addEventListener('input', checkReadyState);
 
-        function toggleCamera() {
-            const container = document.getElementById('cameraContainer');
-            const textContainer = document.getElementById('textInputContainer');
-            if (container.style.display === 'none' || container.style.display === '') {
-                container.style.display = 'block';
-                textContainer.style.display = 'none';
-                initCamera();
-            } else {
-                container.style.display = 'none';
-                stopCamera();
-            }
-        }
-
-        function toggleTextInput() {
-            document.getElementById('cameraContainer').style.display = 'none';
-            document.getElementById('textInputContainer').style.display = 'block';
-            stopCamera();
-        }
-
-        function stopCamera() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-        }
-
-        async function captureImage() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('canvas');
-            const ctx = canvas.getContext('2d');
+        // Extract Learning Outcomes PDF
+        async function extractOutcomes() {
+            const file = document.getElementById('outcomesPdf').files[0];
+            const startPage = parseInt(document.getElementById('outcomesStartPage').value) || 1;
+            const endPage = parseInt(document.getElementById('outcomesEndPage').value) || startPage;
             
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+            if (!file) return showStatus('outcomesStatus', 'Please select Learning Outcomes PDF', 'error');
             
-            showStatus('🔄 Extracting text from photo...', 'success');
+            document.getElementById('outcomesStatus').innerHTML = '<div class="status success">🔄 Extracting pages ' + startPage + '-' + endPage + '...</div>';
             
             try {
-                const result = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
-                    logger: m => console.log(m)
-                });
-                document.getElementById('textbookText').value = result.data.text.trim();
-                showStatus(`✅ Extracted ${result.data.text.length} characters from photo!`, 'success');
-                toggleTextInput();
+                outcomesText = await extractPDFRange(file, startPage, endPage);
+                document.getElementById('outcomesStatus').innerHTML = 
+                    '<div class="pdf-status">✅ Extracted ' + outcomesText.length + ' chars from pages ' + startPage + '-' + endPage + '</div>';
                 checkReadyState();
             } catch (error) {
-                showStatus('OCR failed. Try better lighting/angle.', 'error');
+                document.getElementById('outcomesStatus').innerHTML = 
+                    '<div class="status error">❌ Extraction failed. Trying OCR...</div>';
+                outcomesText = await ocrPDFRange(file, startPage, endPage);
+                document.getElementById('outcomesStatus').innerHTML = 
+                    '<div class="pdf-status">✅ OCR complete! Ready for analysis.</div>';
+                checkReadyState();
             }
         }
 
-        // Enhanced PDF extraction with OCR fallback
-        document.getElementById('pdfFile').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                showStatus('🔄 Extracting PDF text...', 'success');
-                try {
-                    pdfText = await extractTextFromPDF(file);
-                    showStatus(`✅ PDF extracted! ${pdfText.length} characters ready.`, 'success');
-                    checkReadyState();
-                } catch (error) {
-                    showStatus('📖 Native extraction failed. Using OCR...', 'error');
-                    pdfText = await ocrPDF(file);
-                    showStatus('✅ OCR extraction complete!', 'success');
-                    checkReadyState();
-                }
+        // Extract Textbook PDF
+        async function extractTextbook() {
+            const file = document.getElementById('textbookPdf').files[0];
+            const startPage = parseInt(document.getElementById('textbookStartPage').value) || 1;
+            const endPage = parseInt(document.getElementById('textbookEndPage').value) || startPage;
+            
+            if (!file) return showStatus('textbookStatus', 'Please select Textbook PDF', 'error');
+            
+            document.getElementById('textbookStatus').innerHTML = '<div class="status success">🔄 Extracting pages ' + startPage + '-' + endPage + '...</div>';
+            
+            try {
+                textbookText = await extractPDFRange(file, startPage, endPage);
+                document.getElementById('textbookStatus').innerHTML = 
+                    '<div class="pdf-status">✅ Extracted ' + textbookText.length + ' chars from pages ' + startPage + '-' + endPage + '</div>';
+                checkReadyState();
+            } catch (error) {
+                document.getElementById('textbookStatus').innerHTML = 
+                    '<div class="status error">❌ Extraction failed. Trying OCR...</div>';
+                textbookText = await ocrPDFRange(file, startPage, endPage);
+                document.getElementById('textbookStatus').innerHTML = 
+                    '<div class="pdf-status">✅ OCR complete! Ready for analysis.</div>';
+                checkReadyState();
             }
-        });
+        }
 
-        async function extractTextFromPDF(file) {
+        // Extract specific page range from PDF
+        async function extractPDFRange(file, startPage, endPage) {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let fullText = '';
             
-            for (let i = 1; i <= pdf.numPages; i++) {
+            for (let i = startPage; i <= Math.min(endPage, pdf.numPages); i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
                 const pageText = textContent.items.map(item => item.str).join(' ');
-                fullText += pageText + '
+                fullText += `--- PAGE ${i} ---
+${pageText}
 
-';
+`;
             }
             return fullText.trim();
         }
 
-        async function ocrPDF(file) {
+        // OCR specific page range
+        async function ocrPDFRange(file, startPage, endPage) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let fullText = '';
             
-            for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+            for (let i = startPage; i <= Math.min(endPage, pdf.numPages); i++) {
                 const page = await pdf.getPage(i);
                 const viewport = page.getViewport({ scale: 2.0 });
                 canvas.width = viewport.width;
@@ -275,40 +216,34 @@
                 await page.render({ canvasContext: ctx, viewport }).promise;
                 
                 const result = await Tesseract.recognize(canvas.toDataURL(), 'eng');
-                fullText += result.data.text + '
+                fullText += `--- PAGE ${i} (OCR) ---
+${result.data.text}
 
-';
+`;
             }
             return fullText.trim();
         }
 
+        // Main analysis
         async function analyzeContent() {
             const apiKey = document.getElementById('groqApiKey').value.trim();
-            const textbook = document.getElementById('textbookText').value.trim();
-            const startPage = document.getElementById('startPage').value || 1;
-            const endPage = document.getElementById('endPage').value || '';
-
-            if (!apiKey) return showStatus('🔑 Please enter your Groq API key', 'error');
-            if (!pdfText) return showStatus('📚 Please upload learning outcomes PDF', 'error');
-            if (!textbook) return showStatus('📖 Please add textbook content', 'error');
+            
+            if (!apiKey) return showStatus('output', '🔑 Enter Groq API key first', 'error');
+            if (!outcomesText) return showStatus('output', '📚 Extract Learning Outcomes first', 'error');
+            if (!textbookText) return showStatus('output', '📖 Extract Textbook first', 'error');
 
             document.getElementById('analyzeBtn').disabled = true;
-            document.getElementById('output').innerHTML = '<div class="loading">🧠 Analyzing with Groq AI... (10-20 seconds)</div>';
+            document.getElementById('output').innerHTML = '<div class="loading">🧠 Generating lesson plan with Groq AI... (15-25 seconds)</div>';
 
-            const subjectPrompt = `Universal Learning Outcomes Connector
+            const prompt = `Universal Learning Outcomes → Textbook Connector
 
-LEARNING OUTCOMES from PDF: "${pdfText.substring(0, 3000)}..."
+LEARNING OUTCOMES (pages ${document.getElementById('outcomesStartPage').value || 1}-${document.getElementById('outcomesEndPage').value || ''}):
+${outcomesText.substring(0, 4000)}...
 
-TEXTBOOK LESSON (Pages ${startPage}-${endPage}): "${textbook.substring(0, 6000)}..."
+TEXTBOOK LESSON (pages ${document.getElementById('textbookStartPage').value || 1}-${document.getElementById('textbookEndPage').value || ''}):
+${textbookText.substring(0, 6000)}...
 
-TASK:
-1. AUTO-DETECT subject (Math, Science, English, History, etc.) and class level
-2. Extract 5-8 key learning outcomes from PDF
-3. Match each to textbook content with explanation
-4. Create 3 SMART objectives per outcome
-5. Suggest 3-5 activities
-6. Suggest 2-3 assessments
-7. Generate complete lesson plan
+TASK: Auto-detect subject/class, match outcomes to textbook, create lesson plan.
 
 OUTPUT EXACT JSON:
 {
@@ -319,7 +254,7 @@ OUTPUT EXACT JSON:
     {
       "outcome": "Full outcome text",
       "matched": true/false,
-      "matchExplanation": "Why it matches",
+      "matchExplanation": "Why it matches textbook",
       "smartObjectives": ["Objective 1", "Objective 2", "Objective 3"],
       "activities": ["Activity 1", "Activity 2", "Activity 3"],
       "assessments": ["Assessment 1", "Assessment 2"]
@@ -327,8 +262,8 @@ OUTPUT EXACT JSON:
   ],
   "lessonPlan": {
     "duration": "45-60 minutes",
-    "materials": ["List of materials"],
-    "procedure": ["Step 1", "Step 2", "Step 3", "Step 4"]
+    "materials": ["List"],
+    "procedure": ["Step 1", "Step 2", "Step 3"]
   }
 }`;
 
@@ -341,70 +276,63 @@ OUTPUT EXACT JSON:
                     },
                     body: JSON.stringify({
                         model: 'llama3-70b-8192',
-                        messages: [{ role: 'user', content: subjectPrompt }],
+                        messages: [{ role: 'user', content: prompt }],
                         temperature: 0.2,
                         max_tokens: 4000
                     })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`API Error ${response.status}: ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`API Error ${response.status}`);
 
                 const data = await response.json();
                 const result = JSON.parse(data.choices[0].message.content);
-                displayUniversalResults(result);
+                displayResults(result);
             } catch (error) {
-                showStatus(`❌ Error: ${error.message}<br>Get free key: <a href="https://console.groq.com/keys" target="_blank">groq.com</a>`, 'error');
+                showStatus('output', `❌ ${error.message}<br><a href="https://console.groq.com/keys" target="_blank">Get free key →</a>`, 'error');
             } finally {
                 document.getElementById('analyzeBtn').disabled = false;
             }
         }
 
-        function displayUniversalResults(data) {
+        function displayResults(data) {
             let html = `
                 <div class="result-card">
                     <h3>📚 ${data.subject} - Class ${data.class}</h3>
-                    <h4>🎯 Lesson: ${data.lessonTopic}</h4>
+                    <h4>🎯 ${data.lessonTopic}</h4>
                 </div>
             `;
             
             html += '<div class="result-card"><h4>✅ Matched Learning Outcomes</h4>';
-            data.learningOutcomes.forEach((outcome, index) => {
+            data.learningOutcomes.forEach((outcome, i) => {
                 if (outcome.matched) {
                     html += `
                         <div class="match">
-                            <h5>${index + 1}. ${outcome.outcome}</h5>
-                            <p><strong>💡 Why it matches:</strong> ${outcome.matchExplanation}</p>
+                            <h5>${i+1}. ${outcome.outcome}</h5>
+                            <p><strong>💡 Match:</strong> ${outcome.matchExplanation}</p>
                             <div class="objective">
-                                <strong>🎯 SMART Objectives:</strong><br>
-                                ${outcome.smartObjectives.map(obj => `• ${obj}`).join('<br>')}
+                                <strong>🎯 Objectives:</strong><br>${outcome.smartObjectives.map(o => `• ${o}`).join('<br>')}
                             </div>
-                            <strong>🏃 Activities:</strong> ${outcome.activities.join(' • ')}<br><br>
+                            <strong>🏃 Activities:</strong> ${outcome.activities.join(' • ')}<br>
                             <strong>📝 Assessments:</strong> ${outcome.assessments.join(' • ')}
-                        </div>
-                    `;
+                        </div>`;
                 }
             });
             html += '</div>';
-            
+
             html += `
                 <div class="result-card">
-                    <h4>📋 Complete Lesson Plan</h4>
-                    <p><strong>⏱️ Duration:</strong> ${data.lessonPlan.duration}</p>
+                    <h4>📋 Lesson Plan</h4>
+                    <p><strong>⏱️ ${data.lessonPlan.duration}</strong></p>
                     <p><strong>📦 Materials:</strong> ${data.lessonPlan.materials.join(', ')}</p>
-                    <strong>📜 Procedure:</strong><br>
-                    ${data.lessonPlan.procedure.map((step, i) => `${i+1}. ${step}`).join('<br>')}
-                </div>
-            `;
-            
+                    <strong>📜 Steps:</strong><br>${data.lessonPlan.procedure.map((s,i) => `${i+1}. ${s}`).join('<br>')}
+                </div>`;
+
             document.getElementById('output').innerHTML = html;
         }
 
-        function showStatus(message, type) {
-            const output = document.getElementById('output');
-            output.innerHTML = `<div class="status ${type}">${message}</div>`;
+        function showStatus(elementId, message, type) {
+            document.getElementById(elementId).innerHTML = `<div class="status ${type}">${message}</div>`;
         }
     </script>
 </body>
-</html>
+    </html>
