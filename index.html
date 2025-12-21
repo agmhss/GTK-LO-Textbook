@@ -61,7 +61,7 @@
   </div>
 
   <div class="block">
-    <label>Target Language</label>
+    <label>Target Language (Output & OCR)</label>
     <select id="outputLang">
       <option value="English">English</option>
       <option value="Tamil">Tamil (தமிழ்)</option>
@@ -95,7 +95,14 @@
 </div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
+// Line 111-120: Fix for "pdfjsLib is not defined"
+const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
+
+if (pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
+} else {
+  alert("The PDF library failed to load. Please refresh the page or check your internet.");
+}
 
 let outcomesText = "";
 let textbookText = "";
@@ -108,7 +115,7 @@ function setStatus(elId, msg, ok=true){
 
 async function performImageOCR(page) {
   const lang = document.getElementById("outputLang").value === "Tamil" ? "tam+eng" : "eng";
-  const viewport = page.getViewport({ scale: 2.5 }); // Increased scale for better Tamil recognition
+  const viewport = page.getViewport({ scale: 2.2 }); 
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   canvas.height = viewport.height;
@@ -119,8 +126,10 @@ async function performImageOCR(page) {
 }
 
 async function extractRangeFromPdf(file, start, end, statusId){
+  // Line 146: Using the verified pdfjsLib
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const loadingTask = pdfjsLib.getDocument({data:buf});
+  const pdf = await loadingTask.promise;
   const from = Math.max(1, start||1);
   const to = Math.min(end||from, pdf.numPages);
   let all = "";
@@ -178,9 +187,9 @@ document.getElementById("apiKey").addEventListener("input", enableAnalyze);
 async function analyze(){
   const key = document.getElementById("apiKey").value.trim();
   const lang = document.getElementById("outputLang").value;
-  document.getElementById("output").innerHTML = '<div class="status ok">AI is matching outcomes...</div>';
+  document.getElementById("output").innerHTML = '<div class="status ok">AI is processing...</div>';
 
-  const prompt = `Return ONLY valid JSON. Language: ${lang}. Task: Match 5 outcomes from the textbook, provide SMART objectives, activities, assessments, and a step-by-step lesson plan. Outcomes: ${outcomesText.slice(0,3000)} Textbook: ${textbookText.slice(0,5000)}`;
+  const prompt = `Return ONLY valid JSON. Output ALL values in ${lang}. Task: Match outcomes to textbook, give SMART objectives, activities, assessments, and lesson plan. Outcomes: ${outcomesText.slice(0,3000)} Textbook: ${textbookText.slice(0,5000)}`;
 
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions",{
@@ -228,12 +237,12 @@ function downloadText() {
 async function copyToClipboard() {
   try {
     await navigator.clipboard.writeText(getFormattedText());
-    alert("Copied to clipboard!");
+    alert("Copied!");
   } catch (err) {
-    alert("Failed to copy text.");
+    alert("Failed to copy.");
   }
 }
 </script>
 </body>
-  </html>
+        </html>
   
