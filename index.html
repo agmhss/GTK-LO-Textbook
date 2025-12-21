@@ -10,16 +10,14 @@
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 0; padding: 16px;
-      background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      margin: 0; padding: 16px; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
     }
     .wrap {
-      max-width: 900px; margin: 0 auto;
-      background: #fff; border-radius: 16px;
+      max-width: 900px; margin: 0 auto; background: #fff; border-radius: 16px;
       padding: 16px; box-shadow: 0 12px 30px rgba(0,0,0,.15);
     }
     h1 { text-align:center; margin-top: 4px; font-size: 1.4rem; }
-    .block { border:1px dashed #ccd; border-radius:12px; padding:12px; margin-top:12px; }
+    .block { border:1px dashed #ccd; border-radius:12px; padding:12px; margin-top:12px; position: relative;}
     label { font-weight:600; font-size:.9rem; }
     input[type="file"],input[type="password"],input[type="number"], select{
       width:100%; padding:8px 10px; margin-top:6px;
@@ -28,32 +26,33 @@
     .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
     .row input[type="number"]{flex:1;min-width:90px;}
     button{
-      width:100%; margin-top:10px;
-      padding:10px 14px; border-radius:12px;
-      border:none; font-weight:600; font-size:.95rem;
-      color:#fff; background:linear-gradient(45deg,#667eea,#764ba2);
-      cursor: pointer;
+      width:100%; margin-top:10px; padding:10px 14px; border-radius:12px;
+      border:none; font-weight:600; font-size:.95rem; color:#fff;
+      background:linear-gradient(45deg,#667eea,#764ba2); cursor: pointer;
+      transition: opacity 0.3s;
     }
-    button:disabled{opacity:.5; cursor: not-allowed;}
+    button:disabled{ background: #ccc !important; cursor: wait; opacity: 0.7; }
     .btn-group { display: flex; gap: 10px; }
     .download-btn { background: #10b981; }
     .copy-btn { background: #3b82f6; }
     .status{margin-top:8px;padding:8px;border-radius:8px;font-size:.85rem;}
     .ok{background:#e6ffed;color:#03543f;border:1px solid #a7f3d0;}
     .err{background:#fde8e8;color:#9b1c1c;border:1px solid #fecaca;}
+    .lib-status { font-size: 0.75rem; text-align: center; margin-bottom: 10px; font-weight: bold; }
     #output{margin-top:16px;}
-    .card{
-      background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);
-      color:#fff;padding:12px;border-radius:12px;margin-bottom:10px;
-    }
+    .card{ background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%); color:#fff;padding:12px;border-radius:12px;margin-bottom:10px; }
     .match{background:#fff;color:#123;padding:10px;border-radius:10px;margin-top:8px;}
-    .match h4{margin:0 0 4px 0;font-size:.95rem;}
     .obj{background:#eef6ff;border-left:4px solid #667eea;border-radius:8px;padding:6px 8px;margin-top:4px;}
+    /* Spinner animation */
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Learning Outcomes ↔ Textbook Connector</h1>
+  
+  <div id="libIndicator" class="lib-status" style="color: #d97706;">⌛ Initializing PDF & OCR Engines...</div>
 
   <div class="block">
     <label>Groq API key</label>
@@ -61,7 +60,7 @@
   </div>
 
   <div class="block">
-    <label>Target Language (Output & OCR)</label>
+    <label>Language Selection</label>
     <select id="outputLang">
       <option value="English">English</option>
       <option value="Tamil">Tamil (தமிழ்)</option>
@@ -75,7 +74,7 @@
       <input type="number" id="outStart" placeholder="Start page" />
       <input type="number" id="outEnd" placeholder="End page" />
     </div>
-    <button type="button" id="outBtn" onclick="extractOutcomes()">Extract outcomes</button>
+    <button type="button" id="outBtn" onclick="extractOutcomes()" disabled>Extract outcomes</button>
     <div id="outStatus"></div>
   </div>
 
@@ -86,7 +85,7 @@
       <input type="number" id="tbStart" placeholder="Start page" />
       <input type="number" id="tbEnd" placeholder="End page" />
     </div>
-    <button type="button" id="tbBtn" onclick="extractTextbook()">Extract textbook</button>
+    <button type="button" id="tbBtn" onclick="extractTextbook()" disabled>Extract textbook</button>
     <div id="tbStatus"></div>
   </div>
 
@@ -95,23 +94,30 @@
 </div>
 
 <script>
-// Line 114: Global text holders
 let outcomesText = "";
 let textbookText = "";
 let lastAnalysis = null;
+let pdfjsLib = null;
 
-// Line 119: Function to find the PDF library safely
-function getPdfLib() {
-  const lib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
-  if (lib) {
-    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
+// STEP 1: Wait for libraries to load before enabling anything
+function checkLibraries() {
+  pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
+  if (pdfjsLib && typeof Tesseract !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
+    document.getElementById('libIndicator').innerText = "✅ Systems Ready";
+    document.getElementById('libIndicator').style.color = "#059669";
+    document.getElementById('outBtn').disabled = false;
+    document.getElementById('tbBtn').disabled = false;
+  } else {
+    setTimeout(checkLibraries, 500); // Check again in half a second
   }
-  return lib;
 }
+window.onload = checkLibraries;
 
-function setStatus(elId, msg, ok=true){
+function setStatus(elId, msg, ok=true, loading=false){
   const el = document.getElementById(elId);
-  el.innerHTML = `<div class="status ${ok?'ok':'err'}">${msg}</div>`;
+  const spin = loading ? '<span class="spinner"></span>' : '';
+  el.innerHTML = `<div class="status ${ok?'ok':'err'}">${spin}${msg}</div>`;
 }
 
 async function performImageOCR(page) {
@@ -126,28 +132,23 @@ async function performImageOCR(page) {
   return text;
 }
 
-// Line 146: This function was throwing the error
 async function extractRangeFromPdf(file, start, end, statusId){
-  const lib = getPdfLib(); // Safety Check
-  if (!lib) {
-    throw new Error("PDF Library not loaded yet. Check internet and try again.");
-  }
-
+  if (!pdfjsLib) throw new Error("Library not ready");
+  
   const buf = await file.arrayBuffer();
-  // Line 154: Using the verified library
-  const loadingTask = lib.getDocument({data:buf});
-  const pdf = await loadingTask.promise;
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
   const from = Math.max(1, start||1);
   const to = Math.min(end||from, pdf.numPages);
   let all = "";
 
   for(let p=from; p<=to; p++){
-    setStatus(statusId, `Reading page ${p} of ${to}...`);
+    setStatus(statusId, `Reading page ${p} of ${to}...`, true, true);
     const page = await pdf.getPage(p);
     const txtContent = await page.getTextContent();
     
     let pageText = "";
     if (txtContent.items.length === 0) {
+      setStatus(statusId, `OCR Scanning Page ${p}... (Tamil/Eng)`, true, true);
       pageText = await performImageOCR(page);
     } else {
       const sorted = txtContent.items.sort((a, b) => {
@@ -164,25 +165,27 @@ async function extractRangeFromPdf(file, start, end, statusId){
 async function extractOutcomes(){
   const f = document.getElementById("outPdf").files[0];
   if(!f) return setStatus("outStatus","Select PDF",false);
+  const btn = document.getElementById("outBtn");
   try {
-    document.getElementById("outBtn").disabled = true;
+    btn.disabled = true;
     outcomesText = await extractRangeFromPdf(f, Number(document.getElementById("outStart").value), Number(document.getElementById("outEnd").value), "outStatus");
-    setStatus("outStatus", `Done! (${outcomesText.length} chars)`);
+    setStatus("outStatus", `Success: ${outcomesText.length} characters.`);
     enableAnalyze();
   } catch(e) { setStatus("outStatus", e.message, false); }
-  finally { document.getElementById("outBtn").disabled = false; }
+  finally { btn.disabled = false; }
 }
 
 async function extractTextbook(){
   const f = document.getElementById("tbPdf").files[0];
   if(!f) return setStatus("tbStatus","Select PDF",false);
+  const btn = document.getElementById("tbBtn");
   try {
-    document.getElementById("tbBtn").disabled = true;
+    btn.disabled = true;
     textbookText = await extractRangeFromPdf(f, Number(document.getElementById("tbStart").value), Number(document.getElementById("tbEnd").value), "tbStatus");
-    setStatus("tbStatus", `Done! (${textbookText.length} chars)`);
+    setStatus("tbStatus", `Success: ${textbookText.length} characters.`);
     enableAnalyze();
   } catch(e) { setStatus("tbStatus", e.message, false); }
-  finally { document.getElementById("tbBtn").disabled = false; }
+  finally { btn.disabled = false; }
 }
 
 function enableAnalyze(){
@@ -194,20 +197,15 @@ document.getElementById("apiKey").addEventListener("input", enableAnalyze);
 async function analyze(){
   const key = document.getElementById("apiKey").value.trim();
   const lang = document.getElementById("outputLang").value;
-  document.getElementById("output").innerHTML = '<div class="status ok">AI is processing...</div>';
+  setStatus("output", "AI is building your lesson plan...", true, true);
 
-  const prompt = `Return ONLY valid JSON. Output ALL values in ${lang}. Task: Match outcomes to textbook, give SMART objectives, activities, assessments, and lesson plan. Outcomes: ${outcomesText.slice(0,3000)} Textbook: ${textbookText.slice(0,5000)}`;
+  const prompt = `Return ONLY valid JSON. Language: ${lang}. Match 5 outcomes to the textbook, provide SMART objectives, activities, assessments, and lesson plan. Outcomes: ${outcomesText.slice(0,3000)} Textbook: ${textbookText.slice(0,5000)}`;
 
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions",{
       method:"POST",
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
-      body:JSON.stringify({
-        model:"llama3-70b-8192",
-        messages:[{role:"user",content:prompt}],
-        temperature:0.2,
-        response_format: { type: "json_object" }
-      })
+      body:JSON.stringify({ model:"llama3-70b-8192", messages:[{role:"user",content:prompt}], temperature:0.2, response_format: { type: "json_object" } })
     });
     const data = await res.json();
     lastAnalysis = JSON.parse(data.choices[0].message.content);
@@ -220,20 +218,12 @@ function renderResult(d){
   (d.learningOutcomes||[]).forEach((o,i)=>{
     html += `<div class="match"><h4>${i+1}. ${o.outcome}</h4><div class="obj">Objectives: ${o.smartObjectives.join(", ")}</div></div>`;
   });
-  html += `<div class="btn-group">
-            <button class="download-btn" onclick="downloadText()">Download TXT</button>
-            <button class="copy-btn" onclick="copyToClipboard()">Copy All</button>
-           </div>`;
+  html += `<div class="btn-group"><button class="download-btn" onclick="downloadText()">Download TXT</button><button class="copy-btn" onclick="copyToClipboard()">Copy All</button></div>`;
   document.getElementById("output").innerHTML = html;
 }
 
-function getFormattedText() {
-  if(!lastAnalysis) return "";
-  return `Subject: ${lastAnalysis.subject}\nTopic: ${lastAnalysis.lessonTopic}\n\nProcedure:\n${lastAnalysis.lessonPlan.procedure.join('\n')}\n\nMaterials: ${lastAnalysis.lessonPlan.materials.join(', ')}`;
-}
-
 function downloadText() {
-  const content = getFormattedText();
+  const content = `Subject: ${lastAnalysis.subject}\nTopic: ${lastAnalysis.lessonTopic}\n\nProcedure:\n${lastAnalysis.lessonPlan.procedure.join('\n')}`;
   const blob = new Blob(['\ufeff' + content], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -242,13 +232,11 @@ function downloadText() {
 }
 
 async function copyToClipboard() {
-  try {
-    await navigator.clipboard.writeText(getFormattedText());
-    alert("Copied!");
-  } catch (err) {
-    alert("Failed to copy.");
-  }
+  const content = `Subject: ${lastAnalysis.subject}\nTopic: ${lastAnalysis.lessonTopic}\n\nProcedure:\n${lastAnalysis.lessonPlan.procedure.join('\n')}`;
+  await navigator.clipboard.writeText(content);
+  alert("Copied!");
 }
 </script>
 </body>
-</html>
+  </html>
+  
