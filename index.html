@@ -95,18 +95,19 @@
 </div>
 
 <script>
-// Line 111-120: Fix for "pdfjsLib is not defined"
-const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
-
-if (pdfjsLib) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
-} else {
-  alert("The PDF library failed to load. Please refresh the page or check your internet.");
-}
-
+// Line 114: Global text holders
 let outcomesText = "";
 let textbookText = "";
 let lastAnalysis = null;
+
+// Line 119: Function to find the PDF library safely
+function getPdfLib() {
+  const lib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
+  if (lib) {
+    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
+  }
+  return lib;
+}
 
 function setStatus(elId, msg, ok=true){
   const el = document.getElementById(elId);
@@ -125,10 +126,16 @@ async function performImageOCR(page) {
   return text;
 }
 
+// Line 146: This function was throwing the error
 async function extractRangeFromPdf(file, start, end, statusId){
-  // Line 146: Using the verified pdfjsLib
+  const lib = getPdfLib(); // Safety Check
+  if (!lib) {
+    throw new Error("PDF Library not loaded yet. Check internet and try again.");
+  }
+
   const buf = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({data:buf});
+  // Line 154: Using the verified library
+  const loadingTask = lib.getDocument({data:buf});
   const pdf = await loadingTask.promise;
   const from = Math.max(1, start||1);
   const to = Math.min(end||from, pdf.numPages);
@@ -244,5 +251,4 @@ async function copyToClipboard() {
 }
 </script>
 </body>
-        </html>
-  
+</html>
