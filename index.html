@@ -95,7 +95,6 @@ function setStatus(elId, msg, ok=true){
   const el = document.getElementById(elId);
   el.innerHTML = `<div class="status ${ok?'ok':'err'}">${msg}</div>`;
 }
-
 async function extractRangeFromPdf(file, start, end){
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
@@ -103,17 +102,25 @@ async function extractRangeFromPdf(file, start, end){
   const from = Math.max(1, start||1);
   const to = Math.min(end||from, last);
   let all = "";
-  for(let p=from;p<=to;p++){
+
+  for(let p=from; p<=to; p++){
     const page = await pdf.getPage(p);
     const txt = await page.getTextContent();
-    const line = txt.items.map(i=>i.str).join(" ");
-    all += `
+    
+    // Sort items by Y coordinate (top to bottom) then X (left to right)
+    // This significantly improves readability for OCR-processed PDFs
+    const sortedItems = txt.items.sort((a, b) => {
+      if (Math.abs(a.transform[5] - b.transform[5]) < 2) {
+        return a.transform[4] - b.transform[4];
+      }
+      return b.transform[5] - a.transform[5];
+    });
 
-[Page ${p}]
-` + line;
+    const line = sortedItems.map(i => i.str).join(" ");
+    all += `\n\n[Page ${p}]\n` + line;
   }
   return all.trim();
-}
+  }
 
 async function extractOutcomes(){
   const f = document.getElementById("outPdf").files[0];
