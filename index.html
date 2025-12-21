@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Learning Outcomes ↔ Textbook Connector</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -20,7 +21,7 @@
     h1 { text-align:center; margin-top: 4px; font-size: 1.4rem; }
     .block { border:1px dashed #ccd; border-radius:12px; padding:12px; margin-top:12px; }
     label { font-weight:600; font-size:.9rem; }
-    input[type="file"],input[type="password"],input[type="number"]{
+    input[type="file"],input[type="password"],input[type="number"], select{
       width:100%; padding:8px 10px; margin-top:6px;
       border-radius:10px; border:1px solid #ccd; font-size:.9rem;
     }
@@ -31,8 +32,12 @@
       padding:10px 14px; border-radius:12px;
       border:none; font-weight:600; font-size:.95rem;
       color:#fff; background:linear-gradient(45deg,#667eea,#764ba2);
+      cursor: pointer;
     }
-    button:disabled{opacity:.5;}
+    button:disabled{opacity:.5; cursor: not-allowed;}
+    .btn-group { display: flex; gap: 10px; }
+    .download-btn { background: #10b981; }
+    .copy-btn { background: #3b82f6; }
     .status{margin-top:8px;padding:8px;border-radius:8px;font-size:.85rem;}
     .ok{background:#e6ffed;color:#03543f;border:1px solid #a7f3d0;}
     .err{background:#fde8e8;color:#9b1c1c;border:1px solid #fecaca;}
@@ -50,214 +55,185 @@
 <div class="wrap">
   <h1>Learning Outcomes ↔ Textbook Connector</h1>
 
-  <!-- API key -->
   <div class="block">
-    <label>Groq API key (gsk‑…)</label>
+    <label>Groq API key</label>
     <input type="password" id="apiKey" placeholder="gsk_xxxx" />
   </div>
 
-  <!-- Outcomes PDF -->
+  <div class="block">
+    <label>Target Language</label>
+    <select id="outputLang">
+      <option value="English">English</option>
+      <option value="Tamil">Tamil (தமிழ்)</option>
+    </select>
+  </div>
+
   <div class="block">
     <label>Learning outcomes PDF</label>
     <input type="file" id="outPdf" accept="application/pdf" />
     <div class="row">
-      <input type="number" id="outStart" placeholder="Start page" min="1" />
-      <input type="number" id="outEnd" placeholder="End page" min="1" />
+      <input type="number" id="outStart" placeholder="Start page" />
+      <input type="number" id="outEnd" placeholder="End page" />
     </div>
-    <button type="button" onclick="extractOutcomes()">Extract outcomes text</button>
+    <button type="button" id="outBtn" onclick="extractOutcomes()">Extract outcomes</button>
     <div id="outStatus"></div>
   </div>
 
-  <!-- Textbook PDF -->
   <div class="block">
     <label>Textbook PDF</label>
     <input type="file" id="tbPdf" accept="application/pdf" />
     <div class="row">
-      <input type="number" id="tbStart" placeholder="Start page" min="1" />
-      <input type="number" id="tbEnd" placeholder="End page" min="1" />
+      <input type="number" id="tbStart" placeholder="Start page" />
+      <input type="number" id="tbEnd" placeholder="End page" />
     </div>
-    <button type="button" onclick="extractTextbook()">Extract textbook text</button>
+    <button type="button" id="tbBtn" onclick="extractTextbook()">Extract textbook</button>
     <div id="tbStatus"></div>
   </div>
 
-  <button id="analyzeBtn" type="button" onclick="analyze()" disabled>
-    Analyze and build lesson plan
-  </button>
-
+  <button id="analyzeBtn" type="button" onclick="analyze()" disabled>Analyze & Build Lesson Plan</button>
   <div id="output"></div>
 </div>
 
 <script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.393/pdf.worker.min.mjs';
+
 let outcomesText = "";
 let textbookText = "";
+let lastAnalysis = null;
 
 function setStatus(elId, msg, ok=true){
   const el = document.getElementById(elId);
   el.innerHTML = `<div class="status ${ok?'ok':'err'}">${msg}</div>`;
 }
-async function extractRangeFromPdf(file, start, end){
+
+async function performImageOCR(page) {
+  const lang = document.getElementById("outputLang").value === "Tamil" ? "tam+eng" : "eng";
+  const viewport = page.getViewport({ scale: 2.5 }); // Increased scale for better Tamil recognition
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.height = viewport.height;
+  canvas.width = viewport.width;
+  await page.render({ canvasContext: context, viewport: viewport }).promise;
+  const { data: { text } } = await Tesseract.recognize(canvas, lang);
+  return text;
+}
+
+async function extractRangeFromPdf(file, start, end, statusId){
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  const last = pdf.numPages;
   const from = Math.max(1, start||1);
-  const to = Math.min(end||from, last);
+  const to = Math.min(end||from, pdf.numPages);
   let all = "";
 
   for(let p=from; p<=to; p++){
+    setStatus(statusId, `Reading page ${p} of ${to}...`);
     const page = await pdf.getPage(p);
-    const txt = await page.getTextContent();
+    const txtContent = await page.getTextContent();
     
-    // Sort items by Y coordinate (top to bottom) then X (left to right)
-    // This significantly improves readability for OCR-processed PDFs
-    const sortedItems = txt.items.sort((a, b) => {
-      if (Math.abs(a.transform[5] - b.transform[5]) < 2) {
-        return a.transform[4] - b.transform[4];
-      }
-      return b.transform[5] - a.transform[5];
-    });
-
-    const line = sortedItems.map(i => i.str).join(" ");
-    all += `\n\n[Page ${p}]\n` + line;
+    let pageText = "";
+    if (txtContent.items.length === 0) {
+      pageText = await performImageOCR(page);
+    } else {
+      const sorted = txtContent.items.sort((a, b) => {
+        if (Math.abs(a.transform[5] - b.transform[5]) < 5) return a.transform[4] - b.transform[4];
+        return b.transform[5] - a.transform[5];
+      });
+      pageText = sorted.map(i => i.str).join(" ");
+    }
+    all += `\n\n[Page ${p}]\n` + pageText;
   }
   return all.trim();
-  }
+}
 
 async function extractOutcomes(){
   const f = document.getElementById("outPdf").files[0];
-  if(!f){ setStatus("outStatus","Please choose a PDF.",false); return; }
-  const s = Number(document.getElementById("outStart").value||1);
-  const e = Number(document.getElementById("outEnd").value||s);
-  try{
-    setStatus("outStatus",`Reading pages ${s}–${e} …`);
-    outcomesText = await extractRangeFromPdf(f,s,e);
-    setStatus("outStatus",`OK – extracted ${outcomesText.length} characters from outcomes.`);
+  if(!f) return setStatus("outStatus","Select PDF",false);
+  try {
+    document.getElementById("outBtn").disabled = true;
+    outcomesText = await extractRangeFromPdf(f, Number(document.getElementById("outStart").value), Number(document.getElementById("outEnd").value), "outStatus");
+    setStatus("outStatus", `Done! (${outcomesText.length} chars)`);
     enableAnalyze();
-  }catch(err){
-    setStatus("outStatus","This PDF seems to be image‑only. Please OCR it once in a desktop tool and upload the searchable version.",false);
-  }
+  } catch(e) { setStatus("outStatus", e.message, false); }
+  finally { document.getElementById("outBtn").disabled = false; }
 }
 
 async function extractTextbook(){
   const f = document.getElementById("tbPdf").files[0];
-  if(!f){ setStatus("tbStatus","Please choose a PDF.",false); return; }
-  const s = Number(document.getElementById("tbStart").value||1);
-  const e = Number(document.getElementById("tbEnd").value||s);
-  try{
-    setStatus("tbStatus",`Reading pages ${s}–${e} …`);
-    textbookText = await extractRangeFromPdf(f,s,e);
-    setStatus("tbStatus",`OK – extracted ${textbookText.length} characters from textbook.`);
+  if(!f) return setStatus("tbStatus","Select PDF",false);
+  try {
+    document.getElementById("tbBtn").disabled = true;
+    textbookText = await extractRangeFromPdf(f, Number(document.getElementById("tbStart").value), Number(document.getElementById("tbEnd").value), "tbStatus");
+    setStatus("tbStatus", `Done! (${textbookText.length} chars)`);
     enableAnalyze();
-  }catch(err){
-    setStatus("tbStatus","This PDF seems to be image‑only. Please OCR it once in a desktop tool and upload the searchable version.",false);
-  }
+  } catch(e) { setStatus("tbStatus", e.message, false); }
+  finally { document.getElementById("tbBtn").disabled = false; }
 }
 
 function enableAnalyze(){
   const key = document.getElementById("apiKey").value.trim();
   document.getElementById("analyzeBtn").disabled = !(key && outcomesText && textbookText);
 }
-
 document.getElementById("apiKey").addEventListener("input", enableAnalyze);
 
 async function analyze(){
   const key = document.getElementById("apiKey").value.trim();
-  if(!key){ setStatus("output","Enter Groq key first.",false); return; }
+  const lang = document.getElementById("outputLang").value;
+  document.getElementById("output").innerHTML = '<div class="status ok">AI is matching outcomes...</div>';
 
-  document.getElementById("output").innerHTML =
-    '<div class="status ok">Talking to Groq… this can take 10–20 seconds.</div>';
+  const prompt = `Return ONLY valid JSON. Language: ${lang}. Task: Match 5 outcomes from the textbook, provide SMART objectives, activities, assessments, and a step-by-step lesson plan. Outcomes: ${outcomesText.slice(0,3000)} Textbook: ${textbookText.slice(0,5000)}`;
 
-  const prompt = `
-You are a curriculum planner.
-
-LEARNING OUTCOMES TEXT:
-${outcomesText.slice(0,3500)}
-
-TEXTBOOK LESSON TEXT:
-${textbookText.slice(0,6000)}
-
-1. Detect subject and approximate class.
-2. Pick 5–8 key learning outcomes.
-3. For each, say whether it is covered by the lesson and explain briefly.
-4. For each matched outcome, give 3 SMART objectives, 3 activities, 2 assessments.
-5. Build a concise lesson plan (duration, materials, step‑by‑step procedure).
-
-Return ONLY valid JSON:
-
-{
-  "subject": "string",
-  "class": "string",
-  "lessonTopic": "string",
-  "learningOutcomes": [
-    {
-      "outcome": "string",
-      "matched": true,
-      "matchExplanation": "string",
-      "smartObjectives": ["string"],
-      "activities": ["string"],
-      "assessments": ["string"]
-    }
-  ],
-  "lessonPlan": {
-    "duration": "string",
-    "materials": ["string"],
-    "procedure": ["string"]
-  }
-}
-`;
-
-  try{
+  try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions",{
       method:"POST",
-      headers:{
-        "Authorization":"Bearer "+key,
-        "Content-Type":"application/json"
-      },
+      headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
         model:"llama3-70b-8192",
         messages:[{role:"user",content:prompt}],
         temperature:0.2,
-        max_tokens:3500
+        response_format: { type: "json_object" }
       })
     });
-    if(!res.ok) throw new Error("Groq API error: "+res.status);
     const data = await res.json();
-    const obj = JSON.parse(data.choices[0].message.content);
-    renderResult(obj);
-  }catch(err){
-    document.getElementById("output").innerHTML =
-      `<div class="status err">${err.message}</div>`;
-  }
+    lastAnalysis = JSON.parse(data.choices[0].message.content);
+    renderResult(lastAnalysis);
+  } catch(err) { setStatus("output", err.message, false); }
 }
 
 function renderResult(d){
-  let html = `
-  <div class="card">
-    <strong>${d.subject}</strong> – Class ${d.class}<br/>
-    Topic: ${d.lessonTopic}
-  </div>
-  <div class="card">
-    <strong>Matched learning outcomes</strong>`;
+  let html = `<div class="card"><strong>${d.subject}</strong> - ${d.class}<br>Topic: ${d.lessonTopic}</div>`;
   (d.learningOutcomes||[]).forEach((o,i)=>{
-    if(o.matched){
-      html += `
-      <div class="match">
-        <h4>${i+1}. ${o.outcome}</h4>
-        <div><strong>Why it matches:</strong> ${o.matchExplanation}</div>
-        <div class="obj"><strong>Objectives</strong><br>${(o.smartObjectives||[]).map(x=>"• "+x).join("<br>")}</div>
-        <div><strong>Activities:</strong> ${(o.activities||[]).join(" • ")}</div>
-        <div><strong>Assessments:</strong> ${(o.assessments||[]).join(" • ")}</div>
-      </div>`;
-    }
+    html += `<div class="match"><h4>${i+1}. ${o.outcome}</h4><div class="obj">Objectives: ${o.smartObjectives.join(", ")}</div></div>`;
   });
-  html += `</div>
-  <div class="card">
-    <strong>Lesson plan</strong><br/>
-    Duration: ${d.lessonPlan.duration}<br/>
-    Materials: ${(d.lessonPlan.materials||[]).join(", ")}<br/><br/>
-    ${ (d.lessonPlan.procedure||[]).map((s,i)=>`${i+1}. ${s}`).join("<br>") }
-  </div>`;
+  html += `<div class="btn-group">
+            <button class="download-btn" onclick="downloadText()">Download TXT</button>
+            <button class="copy-btn" onclick="copyToClipboard()">Copy All</button>
+           </div>`;
   document.getElementById("output").innerHTML = html;
+}
+
+function getFormattedText() {
+  if(!lastAnalysis) return "";
+  return `Subject: ${lastAnalysis.subject}\nTopic: ${lastAnalysis.lessonTopic}\n\nProcedure:\n${lastAnalysis.lessonPlan.procedure.join('\n')}\n\nMaterials: ${lastAnalysis.lessonPlan.materials.join(', ')}`;
+}
+
+function downloadText() {
+  const content = getFormattedText();
+  const blob = new Blob(['\ufeff' + content], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'lesson-plan.txt';
+  a.click();
+}
+
+async function copyToClipboard() {
+  try {
+    await navigator.clipboard.writeText(getFormattedText());
+    alert("Copied to clipboard!");
+  } catch (err) {
+    alert("Failed to copy text.");
+  }
 }
 </script>
 </body>
-</html>
+  </html>
+  
