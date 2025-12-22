@@ -5,12 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Learning Outcomes ↔ Textbook Connector</title>
   
-  <!-- Updated to latest stable pdf.js (via jsDelivr) and matching worker -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.js"></script>
+  <!-- Latest stable pdfjs-dist from jsDelivr (as of Dec 2025, v4.x legacy for broad compatibility) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/legacy/build/pdf.min.js"></script>
   
-  <!-- Updated to latest tesseract.js (v5 for stability & good language support) -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- Latest Tesseract.js v5 -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -107,10 +106,13 @@ let lastAnalysis = null;
 function checkLibraries() {
   const indicator = document.getElementById('libIndicator');
   
-  const pdfReady = !!window.pdfjsLib;
-  const tesseractReady = !!window.Tesseract;
+  const pdfReady = typeof pdfjsLib !== 'undefined';
+  const tesseractReady = typeof Tesseract !== 'undefined';
 
   if (pdfReady && tesseractReady) {
+    // Set worker explicitly (legacy build includes it, but this ensures compatibility)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/legacy/build/pdf.worker.min.js';
+    
     indicator.innerText = "✅ PDF.js & Tesseract.js Ready";
     indicator.style.background = "#ecfdf5";
     indicator.style.color = "#059669";
@@ -149,7 +151,7 @@ async function performImageOCR(page) {
   await page.render(renderContext).promise;
 
   const { data: { text } } = await Tesseract.recognize(canvas, langCode, {
-    logger: m => {} // silent
+    logger: m => console.log(m) // optional: remove if you don't want logs
   });
   return text.trim();
 }
@@ -164,7 +166,7 @@ async function extractRangeFromPdf(file, startInput, endInput, statusId) {
   
   if (startInput) from = Math.max(1, parseInt(startInput) || 1);
   if (endInput) to = Math.min(pdf.numPages, parseInt(endInput) || pdf.numPages);
-  if (from > to) [from, to] = [to, from]; // swap if needed
+  if (from > to) [from, to] = [to, from];
   
   let allText = "";
 
@@ -174,11 +176,11 @@ async function extractRangeFromPdf(file, startInput, endInput, statusId) {
     const textContent = await page.getTextContent();
     
     let pageText = "";
-    if (textContent.items.length === 0) {
-      setStatus(statusId, `OCR on page ${p}...`, true, true);
-      pageText = await performImageOCR(page);
-    } else {
+    if (textContent.items && textContent.items.length > 0) {
       pageText = textContent.items.map(item => item.str).join(" ");
+    } else {
+      setStatus(statusId, `OCR on page ${p} (scanned image)...`, true, true);
+      pageText = await performImageOCR(page);
     }
     
     allText += `\n\n[Page ${p}]\n${pageText}`;
@@ -187,20 +189,15 @@ async function extractRangeFromPdf(file, startInput, endInput, statusId) {
   return allText.trim();
 }
 
+// Extraction functions remain the same as before...
 async function extractOutcomes() {
-  const fileInput = document.getElementById("outPdf");
-  const file = fileInput.files[0];
+  const file = document.getElementById("outPdf").files[0];
   if (!file) return setStatus("outStatus", "Please select a PDF file", false);
   
   document.getElementById("outBtn").disabled = true;
   try {
-    outcomesText = await extractRangeFromPdf(
-      file,
-      document.getElementById("outStart").value,
-      document.getElementById("outEnd").value,
-      "outStatus"
-    );
-    setStatus("outStatus", `Extracted ${outcomesText.length.toLocaleString()} characters successfully.`, true);
+    outcomesText = await extractRangeFromPdf(file, document.getElementById("outStart").value, document.getElementById("outEnd").value, "outStatus");
+    setStatus("outStatus", `Extracted ${outcomesText.length.toLocaleString()} characters.`, true);
     enableAnalyze();
   } catch (e) {
     setStatus("outStatus", "Error: " + e.message, false);
@@ -211,19 +208,13 @@ async function extractOutcomes() {
 }
 
 async function extractTextbook() {
-  const fileInput = document.getElementById("tbPdf");
-  const file = fileInput.files[0];
+  const file = document.getElementById("tbPdf").files[0];
   if (!file) return setStatus("tbStatus", "Please select a PDF file", false);
   
   document.getElementById("tbBtn").disabled = true;
   try {
-    textbookText = await extractRangeFromPdf(
-      file,
-      document.getElementById("tbStart").value,
-      document.getElementById("tbEnd").value,
-      "tbStatus"
-    );
-    setStatus("tbStatus", `Extracted ${textbookText.length.toLocaleString()} characters successfully.`, true);
+    textbookText = await extractRangeFromPdf(file, document.getElementById("tbStart").value, document.getElementById("tbEnd").value, "tbStatus");
+    setStatus("tbStatus", `Extracted ${textbookText.length.toLocaleString()} characters.`, true);
     enableAnalyze();
   } catch (e) {
     setStatus("tbStatus", "Error: " + e.message, false);
@@ -240,7 +231,10 @@ function enableAnalyze() {
 
 document.getElementById("apiKey").addEventListener("input", enableAnalyze);
 document.getElementById("analyzeBtn").addEventListener("click", analyze);
+document.getElementById("outBtn").addEventListener("click", extractOutcomes);
+document.getElementById("tbBtn").addEventListener("click", extractTextbook);
 
+// The rest of the code (analyze, renderResult, downloadText, copyToClipboard) remains unchanged from the previous improved version.
 async function analyze() {
   const key = document.getElementById("apiKey").value.trim();
   const lang = document.getElementById("outputLang").value;
@@ -250,7 +244,6 @@ async function analyze() {
   setStatus("output", "AI analyzing and matching outcomes...", true, true);
   document.getElementById("analyzeBtn").disabled = true;
 
-  // Truncate to avoid token limits
   const outcomesSnippet = outcomesText.slice(0, 8000);
   const textbookSnippet = textbookText.slice(0, 12000);
 
@@ -291,7 +284,7 @@ Textbook Content (truncated):\n${textbookSnippet}`;
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", // Updated to a current, capable model (as of late 2025)
+        model: "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
         temperature: 0.7,
@@ -360,10 +353,6 @@ async function copyToClipboard() {
   await navigator.clipboard.writeText(content);
   alert("Copied to clipboard!");
 }
-
-// Attach extraction buttons
-document.getElementById("outBtn").addEventListener("click", extractOutcomes);
-document.getElementById("tbBtn").addEventListener("click", extractTextbook);
 </script>
 </body>
-</html>
+  </html>
