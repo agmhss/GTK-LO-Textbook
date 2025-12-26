@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Learning Outcomes ↔ Textbook Connector</title>
   
-  <!-- PDF.js legacy build (v4.x compatible) -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/legacy/build/pdf.min.js"></script>
+  <!-- PDF.js stable version from cdnjs (v2.11.338, exposes pdfjsLib globally) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
   
   <!-- Tesseract.js v5 -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -112,7 +112,7 @@ async function checkLibraries() {
 
   if (pdfReady && tesseractReady) {
     // Set PDF worker
-  GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/legacy/build/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
     
     // Create shared Tesseract worker
     tesseractWorker = await Tesseract.createWorker({
@@ -182,18 +182,9 @@ async function extractRangeFromPdf(file, startInput, endInput, statusId) {
   let allText = "";
 
   for (let p = from; p <= to; p++) {
-    setStatus(statusId, `Processing page ${p}/${to}...`, true, true);
+    setStatus(statusId, `OCR on page ${p}/${to}...`, true, true);
     const page = await pdf.getPage(p);
-    const textContent = await page.getTextContent();
-    
-    let pageText = "";
-    if (textContent.items && textContent.items.length > 0) {
-      pageText = textContent.items.map(item => item.str).join(" ");
-    } else {
-      setStatus(statusId, `OCR on page ${p} (scanned image)...`, true, true);
-      pageText = await performImageOCR(page);
-    }
-    
+    const pageText = await performImageOCR(page);
     allText += `\n\n[Page ${p}]\n${pageText}`;
   }
   
@@ -369,4 +360,4 @@ window.addEventListener('unload', async () => {
 });
 </script>
 </body>
-  </html>
+      </html>
