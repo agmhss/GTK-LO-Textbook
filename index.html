@@ -112,7 +112,7 @@ async function checkLibraries() {
 
   if (pdfReady && tesseractReady) {
     // Set PDF worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/legacy/build/pdf.worker.min.js';
+  GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/legacy/build/pdf.worker.min.js';
     
     // Create shared Tesseract worker
     tesseractWorker = await Tesseract.createWorker({
