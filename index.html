@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Learning Outcomes ↔ Textbook Connector</title>
   
-  <!-- PDF.js stable version from cdnjs (v2.11.338, exposes pdfjsLib globally) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <!-- Reliable PDF.js v3 build that exposes pdfjsLib globally -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   
   <!-- Tesseract.js v5 -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -55,7 +55,7 @@
   <h1>Learning Outcomes ↔ Textbook Connector</h1>
   
   <div id="libIndicator" class="lib-status" style="background: #fffbeb; color: #d97706;">
-    ⌛ Checking Engines (PDF & OCR)...
+    ⌛ Initializing PDF.js & Tesseract.js...
   </div>
 
   <div class="block">
@@ -78,7 +78,7 @@
       <input type="number" id="outStart" placeholder="Start page (optional)" min="1" />
       <input type="number" id="outEnd" placeholder="End page (optional)" min="1" />
     </div>
-    <button type="button" id="outBtn">Extract outcomes</button>
+    <button type="button" id="outBtn" disabled>Extract outcomes</button>
     <div id="outStatus"></div>
   </div>
 
@@ -89,7 +89,7 @@
       <input type="number" id="tbStart" placeholder="Start page (optional)" min="1" />
       <input type="number" id="tbEnd" placeholder="End page (optional)" min="1" />
     </div>
-    <button type="button" id="tbBtn">Extract textbook</button>
+    <button type="button" id="tbBtn" disabled>Extract textbook</button>
     <div id="tbStatus"></div>
   </div>
 
@@ -101,40 +101,37 @@
 let outcomesText = "";
 let textbookText = "";
 let lastAnalysis = null;
-let tesseractWorker = null; // Shared worker for all OCR
+let tesseractWorker = null;
 
-// Library readiness check
-async function checkLibraries() {
+async function initLibraries() {
   const indicator = document.getElementById('libIndicator');
   
-  const pdfReady = typeof pdfjsLib !== 'undefined';
-  const tesseractReady = typeof Tesseract !== 'undefined';
+  indicator.innerText = "⌛ Loading libraries...";
 
-  if (pdfReady && tesseractReady) {
-    // Set PDF worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
-    
-    // Create shared Tesseract worker
-    tesseractWorker = await Tesseract.createWorker({
-      logger: m => console.log(m) // Optional logging
-    });
-    
-    indicator.innerText = "✅ PDF.js & Tesseract.js Ready";
-    indicator.style.background = "#ecfdf5";
-    indicator.style.color = "#059669";
-    
-    document.getElementById('outBtn').disabled = false;
-    document.getElementById('tbBtn').disabled = false;
-  } else {
-    let missing = [];
-    if (!pdfReady) missing.push("PDF.js");
-    if (!tesseractReady) missing.push("Tesseract.js");
-    indicator.innerText = "⌛ Waiting for: " + missing.join(" & ");
-    setTimeout(checkLibraries, 500);
+  // Wait for both libraries to be available
+  while (typeof pdfjsLib === 'undefined' || typeof Tesseract === 'undefined') {
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
+
+  // Set PDF.js worker (matching version)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  // Create and prepare shared Tesseract worker
+  indicator.innerText = "⌛ Initializing Tesseract worker...";
+  tesseractWorker = await Tesseract.createWorker({
+    logger: m => console.log('Tesseract:', m)
+  });
+
+  indicator.innerText = "✅ PDF.js & Tesseract.js Ready";
+  indicator.style.background = "#ecfdf5";
+  indicator.style.color = "#059669";
+
+  // Enable extraction buttons
+  document.getElementById('outBtn').disabled = false;
+  document.getElementById('tbBtn').disabled = false;
 }
 
-window.addEventListener('load', checkLibraries);
+window.addEventListener('load', initLibraries);
 
 function setStatus(elId, msg, ok = true, loading = false) {
   const el = document.getElementById(elId);
@@ -143,62 +140,57 @@ function setStatus(elId, msg, ok = true, loading = false) {
 }
 
 async function performImageOCR(page) {
-  if (!tesseractWorker) throw new Error("Tesseract worker not ready");
+  if (!tesseractWorker) throw new Error("Tesseract worker not initialized");
 
   const langCode = document.getElementById("outputLang").value === "Tamil" ? "tam+eng" : "eng";
-  
-  // Load/init language if not already done (idempotent)
+
+  // Initialize language (safe to call multiple times)
   await tesseractWorker.loadLanguage(langCode);
   await tesseractWorker.initialize(langCode);
-  
+
   const viewport = page.getViewport({ scale: 2.0 });
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   canvas.height = viewport.height;
   canvas.width = viewport.width;
 
-  const renderContext = {
-    canvasContext: context,
-    viewport: viewport
-  };
-  await page.render(renderContext).promise;
+  await page.render({ canvasContext: context, viewport: viewport }).promise;
 
   const { data: { text } } = await tesseractWorker.recognize(canvas);
   return text.trim();
 }
 
-async function extractRangeFromPdf(file, startInput, endInput, statusId) {
+async function extractRangeFromPdf(file, startEl, endEl, statusId) {
   const buf = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({ data: buf });
-  const pdf = await loadingTask.promise;
-  
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
   let from = 1;
   let to = pdf.numPages;
-  
-  if (startInput.value) from = Math.max(1, parseInt(startInput.value) || 1);
-  if (endInput.value) to = Math.min(pdf.numPages, parseInt(endInput.value) || pdf.numPages);
+
+  if (startEl.value) from = Math.max(1, parseInt(startEl.value) || 1);
+  if (endEl.value) to = Math.min(pdf.numPages, parseInt(endEl.value) || pdf.numPages);
   if (from > to) [from, to] = [to, from];
-  
+
   let allText = "";
 
   for (let p = from; p <= to; p++) {
-    setStatus(statusId, `OCR on page ${p}/${to}...`, true, true);
+    setStatus(statusId, `OCR processing page ${p} of ${to}...`, true, true);
     const page = await pdf.getPage(p);
     const pageText = await performImageOCR(page);
     allText += `\n\n[Page ${p}]\n${pageText}`;
   }
-  
+
   return allText.trim();
 }
 
 async function extractOutcomes() {
   const file = document.getElementById("outPdf").files[0];
   if (!file) return setStatus("outStatus", "Please select a PDF file", false);
-  
+
   document.getElementById("outBtn").disabled = true;
   try {
     outcomesText = await extractRangeFromPdf(file, document.getElementById("outStart"), document.getElementById("outEnd"), "outStatus");
-    setStatus("outStatus", `Extracted ${outcomesText.length.toLocaleString()} characters.`, true);
+    setStatus("outStatus", `Extracted ${outcomesText.length.toLocaleString()} characters from outcomes PDF.`, true);
     enableAnalyze();
   } catch (e) {
     setStatus("outStatus", "Error: " + e.message, false);
@@ -211,11 +203,11 @@ async function extractOutcomes() {
 async function extractTextbook() {
   const file = document.getElementById("tbPdf").files[0];
   if (!file) return setStatus("tbStatus", "Please select a PDF file", false);
-  
+
   document.getElementById("tbBtn").disabled = true;
   try {
     textbookText = await extractRangeFromPdf(file, document.getElementById("tbStart"), document.getElementById("tbEnd"), "tbStatus");
-    setStatus("tbStatus", `Extracted ${textbookText.length.toLocaleString()} characters.`, true);
+    setStatus("tbStatus", `Extracted ${textbookText.length.toLocaleString()} characters from textbook PDF.`, true);
     enableAnalyze();
   } catch (e) {
     setStatus("tbStatus", "Error: " + e.message, false);
@@ -235,6 +227,7 @@ document.getElementById("analyzeBtn").addEventListener("click", analyze);
 document.getElementById("outBtn").addEventListener("click", extractOutcomes);
 document.getElementById("tbBtn").addEventListener("click", extractTextbook);
 
+// Rest of the code (analyze, renderResult, etc.) remains exactly the same
 async function analyze() {
   const key = document.getElementById("apiKey").value.trim();
   const lang = document.getElementById("outputLang").value;
@@ -354,10 +347,9 @@ async function copyToClipboard() {
   alert("Copied to clipboard!");
 }
 
-// Optional: terminate worker on page unload to free memory
 window.addEventListener('unload', async () => {
   if (tesseractWorker) await tesseractWorker.terminate();
 });
 </script>
 </body>
-  </html>
+      </html>
