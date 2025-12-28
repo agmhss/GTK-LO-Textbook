@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Learning Outcomes ↔ Textbook Connector</title>
+  <title>Learning Outcomes ↔ Textbook Lesson Matcher</title>
   
-  <!-- Reliable PDF.js v3 build that exposes pdfjsLib globally -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <!-- Reliable PDF.js version that exposes pdfjsLib globally -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
   
   <!-- Tesseract.js v5 -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -52,7 +52,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Learning Outcomes ↔ Textbook Connector</h1>
+  <h1>Learning Outcomes ↔ Textbook Lesson Matcher</h1>
   
   <div id="libIndicator" class="lib-status" style="background: #fffbeb; color: #d97706;">
     ⌛ Initializing PDF.js & Tesseract.js...
@@ -64,15 +64,7 @@
   </div>
 
   <div class="block">
-    <label>Target Language</label>
-    <select id="outputLang">
-      <option value="English">English</option>
-      <option value="Tamil">Tamil (தமிழ்)</option>
-    </select>
-  </div>
-
-  <div class="block">
-    <label>Learning outcomes PDF</label>
+    <label>Learning outcomes PDF (list of outcomes)</label>
     <input type="file" id="outPdf" accept="application/pdf" />
     <div class="row">
       <input type="number" id="outStart" placeholder="Start page (optional)" min="1" />
@@ -83,7 +75,7 @@
   </div>
 
   <div class="block">
-    <label>Textbook PDF</label>
+    <label>Textbook PDF (full book or chapter)</label>
     <input type="file" id="tbPdf" accept="application/pdf" />
     <div class="row">
       <input type="number" id="tbStart" placeholder="Start page (optional)" min="1" />
@@ -93,7 +85,7 @@
     <div id="tbStatus"></div>
   </div>
 
-  <button id="analyzeBtn" type="button" disabled>Analyze & Build Lesson Plan</button>
+  <button id="analyzeBtn" type="button" disabled>Match Outcomes to Textbook Lessons</button>
   <div id="output"></div>
 </div>
 
@@ -108,25 +100,24 @@ async function initLibraries() {
   
   indicator.innerText = "⌛ Loading libraries...";
 
-  // Wait for both libraries to be available
+  // Poll until both libraries are loaded
   while (typeof pdfjsLib === 'undefined' || typeof Tesseract === 'undefined') {
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(r => setTimeout(r, 200));
   }
 
-  // Set PDF.js worker (matching version)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  // Set matching PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
 
-  // Create and prepare shared Tesseract worker
+  // Create shared Tesseract worker
   indicator.innerText = "⌛ Initializing Tesseract worker...";
   tesseractWorker = await Tesseract.createWorker({
-    logger: m => console.log('Tesseract:', m)
+    logger: m => console.log('Tesseract progress:', m)
   });
 
   indicator.innerText = "✅ PDF.js & Tesseract.js Ready";
   indicator.style.background = "#ecfdf5";
   indicator.style.color = "#059669";
 
-  // Enable extraction buttons
   document.getElementById('outBtn').disabled = false;
   document.getElementById('tbBtn').disabled = false;
 }
@@ -139,58 +130,53 @@ function setStatus(elId, msg, ok = true, loading = false) {
   el.innerHTML = `<div class="status ${ok ? 'ok' : 'err'}">${spin}${msg}</div>`;
 }
 
-async function performImageOCR(page) {
-  if (!tesseractWorker) throw new Error("Tesseract worker not initialized");
+async function performOCROnPage(page) {
+  if (!tesseractWorker) throw new Error("Tesseract worker not ready");
 
-  const langCode = document.getElementById("outputLang").value === "Tamil" ? "tam+eng" : "eng";
-
-  // Initialize language (safe to call multiple times)
-  await tesseractWorker.loadLanguage(langCode);
-  await tesseractWorker.initialize(langCode);
+  const lang = document.getElementById("outputLang")?.value === "Tamil" ? "tam+eng" : "eng";
+  await tesseractWorker.loadLanguage(lang);
+  await tesseractWorker.initialize(lang);
 
   const viewport = page.getViewport({ scale: 2.0 });
   const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
   canvas.height = viewport.height;
   canvas.width = viewport.width;
+  const ctx = canvas.getContext('2d');
 
-  await page.render({ canvasContext: context, viewport: viewport }).promise;
+  await page.render({ canvasContext: ctx, viewport }).promise;
 
   const { data: { text } } = await tesseractWorker.recognize(canvas);
   return text.trim();
 }
 
-async function extractRangeFromPdf(file, startEl, endEl, statusId) {
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+async function extractPdfText(file, startEl, endEl, statusId) {
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
 
   let from = 1;
   let to = pdf.numPages;
-
   if (startEl.value) from = Math.max(1, parseInt(startEl.value) || 1);
   if (endEl.value) to = Math.min(pdf.numPages, parseInt(endEl.value) || pdf.numPages);
   if (from > to) [from, to] = [to, from];
 
-  let allText = "";
-
-  for (let p = from; p <= to; p++) {
-    setStatus(statusId, `OCR processing page ${p} of ${to}...`, true, true);
-    const page = await pdf.getPage(p);
-    const pageText = await performImageOCR(page);
-    allText += `\n\n[Page ${p}]\n${pageText}`;
+  let fullText = "";
+  for (let i = from; i <= to; i++) {
+    setStatus(statusId, `OCR page ${i}/${to}...`, true, true);
+    const page = await pdf.getPage(i);
+    const pageText = await performOCROnPage(page);
+    fullText += `\n\n[Page ${i}]\n${pageText}`;
   }
-
-  return allText.trim();
+  return fullText.trim();
 }
 
 async function extractOutcomes() {
   const file = document.getElementById("outPdf").files[0];
-  if (!file) return setStatus("outStatus", "Please select a PDF file", false);
+  if (!file) return setStatus("outStatus", "Select a PDF first", false);
 
   document.getElementById("outBtn").disabled = true;
   try {
-    outcomesText = await extractRangeFromPdf(file, document.getElementById("outStart"), document.getElementById("outEnd"), "outStatus");
-    setStatus("outStatus", `Extracted ${outcomesText.length.toLocaleString()} characters from outcomes PDF.`, true);
+    outcomesText = await extractPdfText(file, document.getElementById("outStart"), document.getElementById("outEnd"), "outStatus");
+    setStatus("outStatus", `Extracted ${outcomesText.length.toLocaleString()} chars`, true);
     enableAnalyze();
   } catch (e) {
     setStatus("outStatus", "Error: " + e.message, false);
@@ -202,12 +188,12 @@ async function extractOutcomes() {
 
 async function extractTextbook() {
   const file = document.getElementById("tbPdf").files[0];
-  if (!file) return setStatus("tbStatus", "Please select a PDF file", false);
+  if (!file) return setStatus("tbStatus", "Select a PDF first", false);
 
   document.getElementById("tbBtn").disabled = true;
   try {
-    textbookText = await extractRangeFromPdf(file, document.getElementById("tbStart"), document.getElementById("tbEnd"), "tbStatus");
-    setStatus("tbStatus", `Extracted ${textbookText.length.toLocaleString()} characters from textbook PDF.`, true);
+    textbookText = await extractPdfText(file, document.getElementById("tbStart"), document.getElementById("tbEnd"), "tbStatus");
+    setStatus("tbStatus", `Extracted ${textbookText.length.toLocaleString()} chars`, true);
     enableAnalyze();
   } catch (e) {
     setStatus("tbStatus", "Error: " + e.message, false);
@@ -223,51 +209,46 @@ function enableAnalyze() {
 }
 
 document.getElementById("apiKey").addEventListener("input", enableAnalyze);
-document.getElementById("analyzeBtn").addEventListener("click", analyze);
 document.getElementById("outBtn").addEventListener("click", extractOutcomes);
 document.getElementById("tbBtn").addEventListener("click", extractTextbook);
+document.getElementById("analyzeBtn").addEventListener("click", analyze);
 
-// Rest of the code (analyze, renderResult, etc.) remains exactly the same
 async function analyze() {
   const key = document.getElementById("apiKey").value.trim();
-  const lang = document.getElementById("outputLang").value;
-  
   if (!key || !outcomesText || !textbookText) return;
-  
-  setStatus("output", "AI analyzing and matching outcomes...", true, true);
+
+  setStatus("output", "AI matching outcomes to textbook lessons...", true, true);
   document.getElementById("analyzeBtn").disabled = true;
 
-  const outcomesSnippet = outcomesText.slice(0, 8000);
-  const textbookSnippet = textbookText.slice(0, 12000);
+  const outcomesSnippet = outcomesText.slice(0, 10000);
+  const textbookSnippet = textbookText.slice(0, 20000);
 
-  const prompt = `You are an expert educator. Output ONLY a valid JSON object (no extra text).
+  const prompt = `You are an expert educator. Extract the list of learning outcomes from the provided PDF text.
+Then, go through the textbook content and find the specific lessons/chapters/sections that teach or cover each outcome.
+Identify the page numbers and quote relevant parts.
 
-Analyze the provided learning outcomes and textbook content. Identify up to 8 strong matches between outcomes and relevant textbook sections.
+Output ONLY valid JSON (no extra text):
 
-Respond in ${lang}.
-
-JSON structure:
 {
-  "subject": "Subject name",
-  "class": "Class/Grade",
-  "lessonTopic": "Main topic",
-  "learningOutcomes": [
+  "outcomes": [
     {
-      "outcome": "Full outcome text",
-      "smartObjectives": ["Objective 1", "Objective 2", ...],
-      "activities": ["Activity 1", "Activity 2", ...],
-      "assessment": "Assessment method"
+      "outcome": "Full text of the learning outcome",
+      "matchedLessons": [
+        {
+          "page": "Page number(s)",
+          "section": "Section or lesson title (if detectable)",
+          "quote": "Short relevant quote from textbook"
+        },
+        ...
+      ]
     },
     ...
-  ],
-  "lessonPlan": {
-    "procedure": ["Step 1", "Step 2", ...]
-  }
+  ]
 }
 
-Learning Outcomes (truncated):\n${outcomesSnippet}
+Learning Outcomes PDF text (may contain page markers):\n${outcomesSnippet}
 
-Textbook Content (truncated):\n${textbookSnippet}`;
+Textbook PDF text (with page markers):\n${textbookSnippet}`;
 
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -280,19 +261,15 @@ Textbook Content (truncated):\n${textbookSnippet}`;
         model: "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        temperature: 0.7,
+        temperature: 0.5,
         max_tokens: 4096
       })
     });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || "API error");
-    }
+    if (!res.ok) throw new Error((await res.json()).error?.message || "API error");
 
     const data = await res.json();
-    const content = data.choices[0].message.content;
-    lastAnalysis = JSON.parse(content);
+    lastAnalysis = JSON.parse(data.choices[0].message.content);
     renderResult(lastAnalysis);
   } catch (err) {
     setStatus("output", "Analysis failed: " + err.message, false);
@@ -302,49 +279,49 @@ Textbook Content (truncated):\n${textbookSnippet}`;
   }
 }
 
-function renderResult(d) {
-  let html = `<div class="card"><strong>${d.subject || "Subject"}</strong> - ${d.class || "Class"}<br>Topic: ${d.lessonTopic || "N/A"}</div>`;
-  
-  if (d.learningOutcomes && d.learningOutcomes.length > 0) {
-    d.learningOutcomes.forEach((o, i) => {
+function renderResult(data) {
+  let html = `<div class="card"><strong>Matched Learning Outcomes to Textbook Lessons</strong></div>`;
+
+  if (data.outcomes && data.outcomes.length > 0) {
+    data.outcomes.forEach((o, i) => {
       html += `<div class="match">
-        <h4>${i + 1}. ${o.outcome || "Outcome"}</h4>
-        <p><strong>SMART Objectives:</strong> ${Array.isArray(o.smartObjectives) ? o.smartObjectives.join("; ") : "N/A"}</p>
-        <p><strong>Activities:</strong> ${Array.isArray(o.activities) ? o.activities.join("; ") : "N/A"}</p>
-        <p><strong>Assessment:</strong> ${o.assessment || "N/A"}</p>
-      </div>`;
+        <h4>${i + 1}. Outcome: ${o.outcome || "N/A"}</h4>`;
+      if (o.matchedLessons && o.matchedLessons.length > 0) {
+        html += `<ul>`;
+        o.matchedLessons.forEach(m => {
+          html += `<li><strong>Page ${m.page}</strong> - ${m.section || "Section"}: "${m.quote}"</li>`;
+        });
+        html += `</ul>`;
+      } else {
+        html += `<p>No matching lesson found.</p>`;
+      }
+      html += `</div>`;
     });
   } else {
-    html += `<div class="match">No outcomes matched.</div>`;
-  }
-
-  if (d.lessonPlan?.procedure) {
-    html += `<div class="match"><strong>Lesson Procedure:</strong><ol><li>${d.lessonPlan.procedure.join('</li><li>')}</li></ol></div>`;
+    html += `<div class="match">No outcomes detected.</div>`;
   }
 
   html += `<div class="btn-group">
-    <button class="download-btn" onclick="downloadText()">Download TXT</button>
-    <button class="copy-btn" onclick="copyToClipboard()">Copy All</button>
+    <button class="download-btn" onclick="downloadResult()">Download JSON</button>
+    <button class="copy-btn" onclick="copyResult()">Copy JSON</button>
   </div>`;
 
   document.getElementById("output").innerHTML = html;
 }
 
-function downloadText() {
+function downloadResult() {
   if (!lastAnalysis) return;
-  const content = `Subject: ${lastAnalysis.subject || ""} - ${lastAnalysis.class || ""}\nTopic: ${lastAnalysis.lessonTopic || ""}\n\nLesson Procedure:\n${(lastAnalysis.lessonPlan?.procedure || []).join('\n')}`;
-  const blob = new Blob(['\ufeff' + content], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([JSON.stringify(lastAnalysis, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'lesson-plan.txt';
+  a.download = 'outcomes-matches.json';
   a.click();
 }
 
-async function copyToClipboard() {
+async function copyResult() {
   if (!lastAnalysis) return;
-  const content = `Subject: ${lastAnalysis.subject || ""} - ${lastAnalysis.class || ""}\nTopic: ${lastAnalysis.lessonTopic || ""}\n\nLesson Procedure:\n${(lastAnalysis.lessonPlan?.procedure || []).join('\n')}`;
-  await navigator.clipboard.writeText(content);
-  alert("Copied to clipboard!");
+  await navigator.clipboard.writeText(JSON.stringify(lastAnalysis, null, 2));
+  alert("JSON copied to clipboard!");
 }
 
 window.addEventListener('unload', async () => {
@@ -352,4 +329,4 @@ window.addEventListener('unload', async () => {
 });
 </script>
 </body>
-      </html>
+  </html>
